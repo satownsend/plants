@@ -1210,6 +1210,7 @@ $('#ghSaveTokenBtn').onclick = async ()=>{
   if (!v || v.startsWith('•')) { alert('Paste a fresh token first.'); return; }
   setToken(v); refreshTokenInput();
   await pullFromRemote();
+  if (state.settings.sheetCsvUrl) await pullFromSheet();
 };
 $('#ghPullBtn').onclick = pullFromRemote;
 $('#ghPushBtn').onclick = pushNow;
