@@ -439,6 +439,7 @@
     <div class="row" style="margin-top:8px;gap:6px">
       <button id="r2SaveBtn" class="tiny">Save credentials</button>
       <button id="r2TestBtn" class="tiny ghost">Test upload</button>
+      <button id="r2RecoverBtn" class="tiny ghost">Recover photos</button>
       <button id="r2ClearBtn" class="tiny ghost" style="margin-left:auto">Forget</button>
     </div>
     <div class="small" id="r2Status" style="margin-top:6px;color:var(--muted)">Not configured.</div>
@@ -1667,12 +1668,125 @@ async function uploadPhoto(plant, file, onStatus){
   await sigv4Request({ method:'PUT', key, body: buf, contentType:'image/jpeg' });
   if (!plant.photos) plant.photos = [];
   plant.photos.push({ key, date: photoDate, caption: '' });
-  save();
+  saveLocal();
+  // Push immediately so a refresh/pull can't race and overwrite the new photo entry.
+  // If this fails the metadata is still in localStorage; queueSync will retry later.
+  if (getToken()){
+    if (onStatus) onStatus('Syncing…');
+    try { await pushNow(); } catch(e){ queueSync(); }
+  } else {
+    queueSync();
+  }
   return key;
 }
 
 async function deletePhotoFromR2(key){
   await sigv4Request({ method:'DELETE', key });
+}
+
+// Signed GET against the bucket root with a query string (ListObjectsV2).
+async function sigv4ListObjects(prefix, continuationToken){
+  const creds = getR2Creds();
+  if (!creds.accessKey || !creds.secretKey) throw new Error('R2 credentials not set');
+  const r = state.settings.r2;
+  const host = `${r.accountId}.r2.cloudflarestorage.com`;
+  const path = `/${r.bucket}/`;
+  const qs = new URLSearchParams();
+  qs.set('list-type', '2');
+  if (prefix) qs.set('prefix', prefix);
+  if (continuationToken) qs.set('continuation-token', continuationToken);
+  // Canonical query string requires sorted keys and RFC3986-encoded values.
+  const sortedParams = [...qs.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+  const canonicalQuery = sortedParams.map(([k,v]) => `${enc(k)}=${enc(v)}`).join('&');
+  const url = `https://${host}${path}?${canonicalQuery}`;
+  const region = 'auto', service = 's3';
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const date = amzDate.slice(0,8);
+  const payloadHash = await sha256hex(new Uint8Array());
+  const headers = {
+    host,
+    'x-amz-content-sha256': payloadHash,
+    'x-amz-date': amzDate,
+  };
+  const sortedHeaderNames = Object.keys(headers).sort();
+  const canonicalHeaders = sortedHeaderNames.map(n=>`${n}:${headers[n]}`).join('\n') + '\n';
+  const signedHeaders = sortedHeaderNames.join(';');
+  const canonicalRequest = `GET\n${path}\n${canonicalQuery}\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+  const crHash = await sha256hex(canonicalRequest);
+  const credentialScope = `${date}/${region}/${service}/aws4_request`;
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${crHash}`;
+  const kDate    = await hmacRaw('AWS4' + creds.secretKey, date);
+  const kRegion  = await hmacRaw(kDate, region);
+  const kService = await hmacRaw(kRegion, service);
+  const kSigning = await hmacRaw(kService, 'aws4_request');
+  const signature = await hmacHex(kSigning, stringToSign);
+  const auth = `AWS4-HMAC-SHA256 Credential=${creds.accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const fetchHeaders = { ...headers, Authorization: auth };
+  delete fetchHeaders.host;
+  const resp = await fetch(url, { method:'GET', headers: fetchHeaders });
+  if (!resp.ok){
+    const txt = await resp.text();
+    throw new Error(`R2 LIST ${resp.status}: ${txt.slice(0,200)}`);
+  }
+  const xml = await resp.text();
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const keys = [...doc.getElementsByTagName('Contents')].map(c => {
+    const k = c.getElementsByTagName('Key')[0]; return k ? k.textContent : '';
+  }).filter(Boolean);
+  const truncated = (doc.getElementsByTagName('IsTruncated')[0]?.textContent || '') === 'true';
+  const next = doc.getElementsByTagName('NextContinuationToken')[0]?.textContent || '';
+  return { keys, truncated, next };
+}
+
+async function recoverPhotosFromR2(onStatus){
+  // Walks all objects under photos/ and rebuilds plant.photos by slug.
+  // Filenames look like: photos/<slug>/YYYY-MM-DD-<rand>.jpg
+  if (onStatus) onStatus('Listing R2 objects…');
+  const allKeys = [];
+  let token = '';
+  do {
+    const { keys, truncated, next } = await sigv4ListObjects('photos/', token);
+    allKeys.push(...keys);
+    token = truncated ? next : '';
+  } while (token);
+
+  const slugToKeys = new Map();
+  for (const k of allKeys){
+    const m = k.match(/^photos\/([^/]+)\/(.+\.jpe?g)$/i);
+    if (!m) continue;
+    const slug = m[1];
+    if (!slugToKeys.has(slug)) slugToKeys.set(slug, []);
+    slugToKeys.get(slug).push(k);
+  }
+
+  let restored = 0, plantsTouched = 0, orphanSlugs = [];
+  const plantBySlug = new Map((state.plants||[]).map(p => [p.id.replace(/^p_/, ''), p]));
+  for (const [slug, keys] of slugToKeys){
+    const plant = plantBySlug.get(slug);
+    if (!plant){ orphanSlugs.push(slug); continue; }
+    const existingKeys = new Set((plant.photos||[]).map(ph => ph.key));
+    const additions = [];
+    for (const key of keys){
+      if (existingKeys.has(key)) continue;
+      const fname = key.split('/').pop() || '';
+      const dm = fname.match(/^(\d{4}-\d{2}-\d{2})/);
+      const date = dm ? dm[1] : '';
+      additions.push({ key, date, caption: '' });
+    }
+    if (additions.length){
+      plant.photos = [...(plant.photos||[]), ...additions];
+      restored += additions.length;
+      plantsTouched++;
+    }
+  }
+  if (restored){
+    saveLocal();
+    if (getToken()) { try { await pushNow(); } catch(e){ queueSync(); } }
+    render();
+  }
+  return { restored, plantsTouched, totalKeys: allKeys.length, orphanSlugs };
 }
 
 /* ---------- Google Sheet (source of truth for plants) ---------- */
@@ -1842,12 +1956,29 @@ async function pullFromRemote(){
     setSyncStatus('pulling…');
     const remote = await ghFetch();
     if (remote && remote.data){
-      // Merge: remote is authoritative for plants/settings; log is unioned by id
+      // Merge: remote is authoritative for plant fields; log + photos are unioned
       const remoteIds = new Set((remote.data.log||[]).map(e=>e.id));
       const localOnly = (state.log||[]).filter(e=>e.id && !remoteIds.has(e.id));
       const hadLocalPending = localOnly.length > 0;
-      state.plants = remote.data.plants || state.plants;
+      // Photo-preserving plant merge: take remote plant fields, but union photos by key
+      // so unpushed local photo additions survive a pull.
+      const localById = new Map((state.plants||[]).map(p=>[p.id, p]));
+      const localPhotoPending = [];
+      const mergedPlants = (remote.data.plants || []).map(rp => {
+        const lp = localById.get(rp.id);
+        if (!lp) return rp;
+        const remotePhotos = rp.photos || [];
+        const remoteKeys = new Set(remotePhotos.map(ph => ph.key));
+        const extraLocal = (lp.photos || []).filter(ph => ph.key && !remoteKeys.has(ph.key));
+        if (extraLocal.length) localPhotoPending.push(rp.id);
+        return { ...rp, photos: [...remotePhotos, ...extraLocal] };
+      });
+      // Plants that exist locally but not remotely — keep them (they were never pushed)
+      const remoteIdSet = new Set((remote.data.plants||[]).map(p=>p.id));
+      const localOnlyPlants = (state.plants||[]).filter(p => !remoteIdSet.has(p.id));
+      state.plants = remote.data.plants ? [...mergedPlants, ...localOnlyPlants] : state.plants;
       state.log = [...(remote.data.log||[]), ...localOnly];
+      const hadLocalPhotoPending = localPhotoPending.length > 0;
       const remoteSettings = remote.data.settings || {};
       state.settings = {...state.settings, ...remoteSettings};
       // re-pin hardcoded location + R2 config
@@ -1864,7 +1995,7 @@ async function pullFromRemote(){
       suspendSync = true; saveLocal(); suspendSync = false;
       render();
       setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
-      if (hadLocalPending) setTimeout(pushNow, 200);
+      if (hadLocalPending || hadLocalPhotoPending) setTimeout(pushNow, 200);
     } else {
       // First time — push current state up directly (don't call pushNow, it'd re-enter guard)
       setSyncStatus('pushing initial…');
@@ -1890,7 +2021,7 @@ async function pushNow(){
   syncing = true;
   try {
     setSyncStatus('pushing…');
-    await pushWithRetry(2);
+    await pushWithRetry(5);
     lastSha = lastSha; // set inside pushWithRetry
     suspendSync = true; saveLocal(); suspendSync = false;
     setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
@@ -1916,7 +2047,9 @@ async function pushWithRetry(triesLeft){
     lastSha = newSha;
   } catch(e){
     if (/\b409\b/.test(e.message) && triesLeft > 1){
-      // Conflict — someone else wrote in the meantime. Refetch and retry.
+      // Conflict — someone else wrote in the meantime. Backoff briefly, refetch, retry.
+      const backoffMs = 250 * (6 - triesLeft);  // 250, 500, 750, 1000ms
+      await new Promise(r => setTimeout(r, backoffMs));
       return pushWithRetry(triesLeft - 1);
     }
     throw e;
@@ -2005,6 +2138,19 @@ $('#r2TestBtn').onclick = async ()=>{
 $('#r2ClearBtn').onclick = ()=>{
   if (!confirm('Forget R2 credentials on this device?')) return;
   setR2Creds(null); refreshR2Input();
+};
+$('#r2RecoverBtn').onclick = async ()=>{
+  if (!confirm('Scan R2 and rebuild missing photo metadata for all plants?')) return;
+  const st = $('#r2Status');
+  const setStatus = (m, kind) => { st.textContent = m; st.style.color = kind==='err'?'#e8a06a':kind==='ok'?'var(--accent)':'var(--muted)'; };
+  try {
+    const res = await recoverPhotosFromR2(setStatus);
+    let msg = `Recovered ${res.restored} photo${res.restored===1?'':'s'} across ${res.plantsTouched} plant${res.plantsTouched===1?'':'s'} (scanned ${res.totalKeys} R2 objects).`;
+    if (res.orphanSlugs.length) msg += ` Skipped ${res.orphanSlugs.length} orphan slug${res.orphanSlugs.length===1?'':'s'}: ${res.orphanSlugs.slice(0,5).join(', ')}${res.orphanSlugs.length>5?'…':''}`;
+    setStatus(msg, res.restored ? 'ok' : '');
+  } catch(e){
+    setStatus('Recover failed: '+e.message, 'err');
+  }
 };
 
 /* ---------- render ---------- */
