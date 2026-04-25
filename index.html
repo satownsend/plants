@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Plants">
-<title>Scott and Stacy's Plants</title>
+<title>Our Plants</title>
 <style>
   :root{
     --bg:#08191c;            /* deep teal, near-black */
@@ -371,7 +371,7 @@
 
 <header>
   <div>
-    <h1>Scott and Stacy's Plants</h1>
+    <h1>Our Plants</h1>
     <div class="sub" id="dateline">—</div>
   </div>
   <div class="row">
@@ -584,7 +584,7 @@
   </div>
 </div>
 
-<div class="modal-back" id="lightbox" style="background:rgba(0,0,0,.92);">
+<div class="modal-back" id="lightbox" style="background:rgba(0,0,0,.92);z-index:60">
   <div style="position:relative;max-width:96vw;max-height:96vh;display:flex;flex-direction:column;align-items:center;gap:10px">
     <button class="close" id="lightboxClose" style="position:absolute;top:-6px;right:-6px;color:#fff;font-size:28px">×</button>
     <img id="lightboxImg" style="max-width:96vw;max-height:80vh;object-fit:contain;border-radius:8px;background:#0a0a0a">
@@ -2699,7 +2699,10 @@ function renderStats(){
       targetEl.innerHTML = `<div class="stats-empty">${emptyMsg}</div>`;
       return;
     }
-    const minY = Math.min(...byYear.keys()), maxY = Math.max(...byYear.keys());
+    // Extend through the current year so empty recent years still show as zero bars.
+    const currentYear = new Date().getFullYear();
+    const minY = Math.min(...byYear.keys());
+    const maxY = Math.max(currentYear, ...byYear.keys());
     const series = [];
     for (let y=minY; y<=maxY; y++) series.push([y, byYear.get(y)||0]);
     const w = 360, h = 200, padL = 24, padR = 12, padT = 16, padB = 28;
