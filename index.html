@@ -230,6 +230,11 @@
   #frostLog .pill-frost{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(126,196,204,.15);color:var(--cool);border:1px solid rgba(126,196,204,.3)}
   #frostLog .pill-damage{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(224,138,74,.15);color:var(--warn);border:1px solid rgba(224,138,74,.3)}
   #frostLog .empty{padding:18px;color:var(--muted);text-align:center}
+  #recentLog{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:4px}
+  #recentLog table{width:100%;border-collapse:collapse;font-size:12px}
+  #recentLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  #recentLog td{padding:5px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+  #recentLog .empty{display:block;padding:14px;color:var(--muted);text-align:center}
   a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
   a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -463,6 +468,11 @@
       <input type="date" id="logDate" style="flex:1">
       <input type="time" id="logTime" style="flex:1">
       <button class="ghost tiny" id="logNowBtn" title="Reset to now">now</button>
+    </div>
+    <div class="row" id="logTempRow" style="margin-bottom:8px;gap:6px;display:none;align-items:center">
+      <label class="small" for="logTemp" style="color:var(--muted)">Low temp:</label>
+      <input type="number" id="logTemp" step="1" placeholder="e.g. 28" style="flex:1;min-width:0">
+      <span class="small" id="logTempUnit" style="color:var(--muted)">°F</span>
     </div>
     <input type="text" id="logNote" placeholder="optional note (e.g. deep soak, 1 gal each)">
     <hr>
@@ -1649,11 +1659,14 @@ function openInfo(id){
     histEl.innerHTML = '<div class="empty">No log entries yet.</div>';
   } else {
     histEl.innerHTML = '<table><thead><tr><th>When</th><th>Action</th><th>Note</th></tr></thead><tbody>'
-      + entries.map(e => `<tr>
+      + entries.map(e => {
+        const tempBadge = e.temp !== undefined ? `<span style="color:var(--cool)">${escapeHtml(fmtTemp(e.temp))}</span>${e.note ? ' · ' : ''}` : '';
+        return `<tr>
           <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
           <td class="action">${escapeHtml(e.action || '')}</td>
-          <td>${escapeHtml(e.note || '')}</td>
-        </tr>`).join('')
+          <td>${tempBadge}${escapeHtml(e.note || '')}</td>
+        </tr>`;
+      }).join('')
       + '</tbody></table>';
   }
 
@@ -1954,40 +1967,62 @@ function openEdit(id){
 /* ---------- log ---------- */
 function hmNow(d){ d = d || new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
 function fmtLogWhen(e){ return e.date + (e.time ? ' ' + e.time : ''); }
+function tempUnitSymbol(){ return (state.settings.units === 'C') ? '°C' : '°F'; }
+function fmtTemp(t){
+  if (t === undefined || t === null || t === '') return '';
+  const n = Number(t);
+  if (isNaN(n)) return '';
+  return Math.round(n) + tempUnitSymbol();
+}
+function isFrostAction(a){ return a === 'frost' || a === 'frost damage'; }
+function applyTempRowVisibility(){
+  const row = $('#logTempRow');
+  if (!row) return;
+  row.style.display = isFrostAction($('#logAction').value) ? 'flex' : 'none';
+  const unitEl = $('#logTempUnit');
+  if (unitEl) unitEl.textContent = tempUnitSymbol();
+}
 function resetLogDateTime(){
   const now = new Date();
   $('#logDate').value = ymd(now);
   $('#logTime').value = hmNow(now);
 }
 resetLogDateTime();
+applyTempRowVisibility();
 $('#logNowBtn').onclick = resetLogDateTime;
+$('#logAction').addEventListener('change', applyTempRowVisibility);
 $('#logBtn').onclick = ()=>{
   const pid = $('#logPlant').value;
   const action = $('#logAction').value;
   const note = $('#logNote').value.trim();
   const date = $('#logDate').value || ymd(new Date());
   const time = $('#logTime').value || '';
+  const tempRaw = isFrostAction(action) ? $('#logTemp').value.trim() : '';
+  const temp = tempRaw === '' ? undefined : (parseFloat(tempRaw));
   let targets;
   if (pid === '__all__') targets = state.plants.map(p=>p.id);
   else if (pid === '__yard__') targets = [''];   // single yard-wide entry, plantId stays empty
   else targets = [pid];
   for (const t of targets){
-    state.log.push({id:uid(), plantId:t, action, note, date, time});
+    const entry = {id:uid(), plantId:t, action, note, date, time};
+    if (temp !== undefined && !isNaN(temp)) entry.temp = temp;
+    state.log.push(entry);
   }
   $('#logNote').value = '';
+  $('#logTemp').value = '';
   resetLogDateTime();
   save(); renderPlants(); renderLog(); buildBrief();
 };
 function renderLog(){
   // Sort by date+time descending so back-dated entries land in the right place
   const sorted = (state.log||[]).slice().sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
-  const recent = sorted.slice(0, 10);
-  if (!recent.length){ $('#recentLog').innerHTML = '<span class="empty">No entries yet.</span>'; return; }
+  if (!sorted.length){ $('#recentLog').innerHTML = '<span class="empty">No entries yet.</span>'; return; }
   $('#recentLog').innerHTML = '<table><thead><tr><th>When</th><th>Plant</th><th>Action</th><th>Note</th></tr></thead><tbody>'
-    + recent.map(e=>{
+    + sorted.map(e=>{
       const p = state.plants.find(x=>x.id===e.plantId);
       const who = p ? p.name : (e.plantId === '' ? 'Yard' : '?');
-      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+      const tempBadge = e.temp !== undefined ? `<span class="meta">${escapeHtml(fmtTemp(e.temp))}${e.note ? ' · ' : ''}</span>` : '';
+      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
@@ -2802,14 +2837,16 @@ function renderFrostLog(){
     el.innerHTML = '<div class="empty">No frost events logged yet. Use Quick log → "frost" or "frost damage" to add one.</div>';
     return;
   }
-  el.innerHTML = '<table><thead><tr><th>When</th><th>Type</th><th>Plant</th><th>Note</th></tr></thead><tbody>'
+  el.innerHTML = '<table><thead><tr><th>When</th><th>Type</th><th>Low</th><th>Plant</th><th>Note</th></tr></thead><tbody>'
     + entries.map(e => {
       const p = state.plants.find(x => x.id === e.plantId);
       const pillCls = e.action === 'frost damage' ? 'pill-damage' : 'pill-frost';
       const who = p ? p.name : (e.plantId === '' ? '<em style="color:var(--muted)">Yard</em>' : '—');
+      const temp = e.temp !== undefined ? fmtTemp(e.temp) : '';
       return `<tr>
         <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
         <td class="action"><span class="${pillCls}">${escapeHtml(e.action)}</span></td>
+        <td class="when">${temp ? escapeHtml(temp) : '<span style="color:var(--muted)">—</span>'}</td>
         <td>${who === '—' ? '—' : (p ? escapeHtml(p.name) : who)}</td>
         <td>${escapeHtml(e.note || '')}</td>
       </tr>`;
