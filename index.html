@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d1611">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Plants">
 <title>Scott and Stacy's Plants</title>
 <style>
   :root{
@@ -123,6 +127,80 @@
   .small{font-size:12px;color:var(--muted)}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   @media (max-width:700px){.grid3{grid-template-columns:1fr}.forecast{grid-template-columns:repeat(3,1fr)}}
+
+  /* ---------- mobile (≤700px) ---------- */
+  @media (max-width:700px){
+    .wrap{padding:14px 12px 80px}
+    h1{font-size:20px}
+    header{gap:10px;margin-bottom:14px}
+    header > div:first-child{flex:1 1 100%}
+    .panel{padding:14px 14px;border-radius:10px}
+    h2{font-size:13px}
+    .topline{font-size:16px}
+    /* Header chips smaller, allow wrap */
+    .chip{font-size:11px;padding:3px 8px}
+    /* Bigger tap targets */
+    button{padding:9px 14px;min-height:38px}
+    button.tiny{padding:6px 10px;min-height:32px}
+    input[type=text],input[type=date],input[type=number],select,textarea{
+      padding:9px 11px;font-size:16px; /* 16px prevents iOS zoom on focus */
+    }
+    /* Quick log row stacks */
+    .panel select#logPlant{min-width:0;width:100%;flex:1 1 100%}
+    .panel select#logAction{width:100%;flex:1 1 100%}
+    /* Plant table → cards */
+    #plantTable thead{display:none}
+    #plantTable, #plantTable tbody{display:block;width:100%}
+    #plantTable tr{
+      display:block;width:100%;background:var(--panel2);
+      border:1px solid var(--line);border-radius:10px;
+      margin:0 0 10px;padding:12px 14px 12px 14px;position:relative;
+    }
+    #plantTable tr:hover td{background:transparent}
+    #plantTable td{display:block;border:0;padding:3px 0;font-size:13px}
+    /* Name cell — heading-style, leave room for edit btn */
+    #plantTable td:nth-child(1){
+      font-size:15px;font-weight:600;margin:0 0 6px;padding-right:64px;
+    }
+    /* Label prefix for other cells */
+    #plantTable td[data-label]::before{
+      content:attr(data-label) " ";
+      color:var(--muted);font-size:10px;font-weight:600;
+      text-transform:uppercase;letter-spacing:.08em;margin-right:6px;
+    }
+    /* Hide cells with no value to reduce noise */
+    #plantTable td.is-empty,
+    #plantTable td.is-empty-mobile{display:none}
+    /* Edit button: top-right of card */
+    #plantTable td:last-child{
+      position:absolute;top:10px;right:10px;padding:0;
+    }
+    #plantTable td:last-child button{padding:5px 10px;min-height:0;font-size:12px}
+    /* Filter row + add plant button bigger */
+    .filter-row{padding:6px 0}
+    .filter-row label{padding:4px 0}
+    /* Edit row inside card layout */
+    tr.edit-row td{padding:8px 0 0}
+    tr.edit-row td:last-child{position:static}
+    /* Modal mobile */
+    .modal-back{padding:8px}
+    .modal{padding:18px 18px 22px;border-radius:12px}
+    .modal h3{font-size:18px;padding-right:32px}
+    .modal .kv{grid-template-columns:90px 1fr;font-size:12px}
+    /* Forecast cells smaller */
+    .forecast .day{padding:6px 4px}
+    .forecast .day .hi{font-size:13px}
+    /* Settings inputs full-width */
+    .grid3{gap:10px}
+  }
+  @media (max-width:380px){
+    .forecast{grid-template-columns:repeat(2,1fr)}
+    h1{font-size:18px}
+  }
+  /* iOS safe area */
+  @supports (padding:max(0px)){
+    .wrap{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  }
 </style>
 </head>
 <body>
@@ -222,6 +300,17 @@
       <label class="small" style="margin-top:8px;display:block">Hardiness zone (optional)</label>
       <input type="text" id="zoneInput" placeholder="e.g. 7a">
     </div>
+  </div>
+  <hr>
+  <div>
+    <h2 style="margin:0 0 8px">Google Sheet (source of truth)</h2>
+    <div class="small" style="margin-bottom:6px">Published CSV URL — plants are read from here on load.</div>
+    <input type="text" id="sheetUrlInput" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?...output=csv">
+    <div class="row" style="margin-top:8px;gap:6px">
+      <button id="sheetSaveBtn" class="tiny">Save URL</button>
+      <button id="sheetPullBtn" class="tiny ghost">Pull from sheet now</button>
+    </div>
+    <div class="small" id="sheetStatus" style="margin-top:6px;color:var(--muted)">Not configured.</div>
   </div>
   <hr>
   <div>
@@ -474,6 +563,7 @@ function openSettings(){
   $('#unitsInput').value = state.settings.units || 'F';
   $('#zoneInput').value = state.settings.zone || '';
   if (typeof refreshTokenInput === 'function') refreshTokenInput();
+  if (typeof refreshSheetInput === 'function') refreshSheetInput();
   p.scrollIntoView({behavior:'smooth', block:'start'});
 }
 $('#settingsBtn').onclick = ()=>{
@@ -743,15 +833,23 @@ function renderPlants(){
     const tagBadges = (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
       .map(t=>`<span class="pill ${/tender|frost/i.test(t)?'tender':''}">${escapeHtml(t)}</span>`).join('');
     const qty = Number(p.quantity)||1;
+    const cellQty = qty>1?`<strong>${qty}</strong>`:`<span class="meta">${qty}</span>`;
+    const cellType = p.type ? `<span class="meta">${escapeHtml(p.type)}</span>` : '';
+    const cellSpot = p.spot ? escapeHtml(p.spot) : '';
+    const cellPlanted = p.purchased ? plantedDuration(p.purchased) : '';
+    const cellWatered = lastW ? `${daysSince(lastW.date)}d ago` : '';
+    const cellFed = lastF ? `${daysSince(lastF.date)}d ago` : '';
+    const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
+    const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
       <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
-      <td>${qty>1?`<strong>${qty}</strong>`:`<span class="meta">${qty}</span>`}</td>
-      <td><span class="meta">${escapeHtml(p.type||'')}</span></td>
-      <td>${escapeHtml(p.spot||'')}</td>
-      <td>${p.purchased ? plantedDuration(p.purchased) : '<span class="meta">—</span>'}</td>
-      <td>${lastW ? `${daysSince(lastW.date)}d ago` : '<span class="meta">—</span>'}</td>
-      <td>${lastF ? `${daysSince(lastF.date)}d ago` : '<span class="meta">—</span>'}</td>
-      <td><span class="meta">${escapeHtml(p.notes||'')}</span></td>
+      <td data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
+      <td data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
+      <td data-label="Spot" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
+      <td data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
+      <td data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
+      <td data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
+      <td data-label="Notes" class="${empty(cellNotes)}">${cellNotes||'<span class="meta">—</span>'}</td>
       <td><button class="ghost tiny" data-edit="${p.id}">edit</button></td>
     `;
     tb.appendChild(tr);
@@ -871,6 +969,117 @@ function renderLog(){
       return `<tr><td>${e.date}</td><td>${escapeHtml(p?p.name:'?')}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
     }).join('')
     + '</tbody></table>';
+}
+
+/* ---------- Google Sheet (source of truth for plants) ---------- */
+function parseCSV(text){
+  const rows = []; let row = []; let field = ''; let inQuotes = false; let i = 0;
+  while (i < text.length){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++;
+    } else {
+      if (c === '"'){ inQuotes = true; i++; continue; }
+      if (c === ','){ row.push(field); field = ''; i++; continue; }
+      if (c === '\r'){ i++; continue; }
+      if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      field += c; i++;
+    }
+  }
+  if (field !== '' || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function plantSlug(name){
+  return 'p_' + (name||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+}
+function normalizeDate(s){
+  if (!s) return '';
+  s = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+  return '';
+}
+function csvToPlants(rows, existingByName){
+  if (!rows.length) return [];
+  const headers = rows[0].map(h=>(h||'').trim().toLowerCase());
+  const idx = (k) => headers.findIndex(h=>h===k.toLowerCase());
+  const cName=idx('tree'), cDate=idx('date purchased'), cQty=idx('quantity'),
+        cPrice=idx('price'), cAge=idx('years old at purchase'), cSpot=idx('planting location'),
+        cSp=idx('spring color'), cSu=idx('summer color'), cFa=idx('fall color'),
+        cNotes=idx('notes'), cDead=idx('dead');
+  if (cName < 0) throw new Error('Sheet missing required "Tree" column header');
+  const plants = [];
+  for (let r=1; r<rows.length; r++){
+    const row = rows[r] || [];
+    const name = (row[cName]||'').trim();
+    if (!name) continue;
+    const existing = existingByName.get(name.toLowerCase()) || {};
+    const noteParts = [];
+    if (cPrice>=0 && row[cPrice]) noteParts.push(`$${String(row[cPrice]).replace(/^\$/,'')}`);
+    if (cAge>=0 && row[cAge])     noteParts.push(`Age at purchase: ${row[cAge]}`);
+    if (cSp>=0 && row[cSp])       noteParts.push(`Spring: ${row[cSp]}`);
+    if (cSu>=0 && row[cSu])       noteParts.push(`Summer: ${row[cSu]}`);
+    if (cFa>=0 && row[cFa])       noteParts.push(`Fall: ${row[cFa]}`);
+    if (cNotes>=0 && row[cNotes]) noteParts.push(row[cNotes]);
+    const spot = cSpot>=0 ? (row[cSpot]||'').trim() : '';
+    const isContainer = /\bpot\b|\bcontainer\b|\bhanging\b/i.test(spot);
+    const isDead = cDead>=0
+      ? /^(true|yes|1|dead|x)$/i.test((row[cDead]||'').trim())
+      : !!existing.dead;
+    plants.push({
+      id: plantSlug(name),
+      name,
+      type: existing.type || '',
+      spot,
+      container: isContainer || !!existing.container,
+      tags: existing.tags || '',
+      notes: noteParts.join('. ').trim(),
+      purchased: cDate>=0 ? normalizeDate(row[cDate]) : '',
+      dead: isDead,
+      quantity: cQty>=0 ? Math.max(1, parseInt(row[cQty]||'1', 10) || 1) : 1,
+    });
+  }
+  return plants;
+}
+
+async function pullFromSheet(){
+  const url = state.settings.sheetCsvUrl;
+  if (!url) return;
+  const setStatus = (msg, kind) => {
+    const el = $('#sheetStatus');
+    if (el){ el.textContent = msg; el.style.color = kind==='err'?'#e8a06a':kind==='ok'?'var(--accent)':'var(--muted)'; }
+  };
+  try {
+    setStatus('Pulling from sheet…');
+    const r = await fetch(url, {cache:'no-store'});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const txt = await r.text();
+    const rows = parseCSV(txt);
+    const existingByName = new Map((state.plants||[]).map(p=>[p.name.toLowerCase(), p]));
+    const newPlants = csvToPlants(rows, existingByName);
+    if (!newPlants.length) throw new Error('No plant rows parsed');
+    // Migrate log entries: map any old plantId to the new slug if names match
+    const oldIdToName = new Map((state.plants||[]).map(p=>[p.id, p.name.toLowerCase()]));
+    const newNameToId = new Map(newPlants.map(p=>[p.name.toLowerCase(), p.id]));
+    state.log = (state.log||[]).map(e=>{
+      const nm = oldIdToName.get(e.plantId);
+      const newId = nm && newNameToId.get(nm);
+      return newId ? {...e, plantId:newId} : e;
+    });
+    state.plants = newPlants;
+    state.settings.sheetLastPull = new Date().toISOString();
+    save();   // triggers GitHub push too
+    render();
+    setStatus(`${newPlants.length} plants pulled at ${new Date().toLocaleTimeString()}`, 'ok');
+  } catch(e){
+    setStatus('Error: '+e.message, 'err');
+  }
 }
 
 /* ---------- GitHub sync ---------- */
@@ -1009,15 +1218,42 @@ $('#ghClearTokenBtn').onclick = ()=>{
   setToken(''); refreshTokenInput(); setSyncStatus('sync: off');
 };
 
+// Sheet sync handlers
+function refreshSheetInput(){
+  const el = $('#sheetUrlInput'); if (!el) return;
+  el.value = state.settings.sheetCsvUrl || '';
+  const status = $('#sheetStatus');
+  if (state.settings.sheetCsvUrl){
+    const last = state.settings.sheetLastPull;
+    status.textContent = last ? `Last pull: ${new Date(last).toLocaleString()}` : 'Configured but not yet pulled.';
+  } else {
+    status.textContent = 'Not configured.';
+  }
+}
+$('#sheetSaveBtn').onclick = async ()=>{
+  const v = $('#sheetUrlInput').value.trim();
+  state.settings.sheetCsvUrl = v;
+  save();
+  refreshSheetInput();
+  if (v) await pullFromSheet();
+};
+$('#sheetPullBtn').onclick = pullFromSheet;
+
 /* ---------- render ---------- */
 function render(){ renderPlants(); renderLog(); buildBrief(); }
 render();
 fetchForecast();
 refreshTokenInput();
-if (getToken()){
-  pullFromRemote();
-  setInterval(pullFromRemote, 60000);
-}
+refreshSheetInput();
+(async ()=>{
+  if (getToken()){
+    await pullFromRemote();
+    setInterval(pullFromRemote, 60000);
+  }
+  if (state.settings.sheetCsvUrl){
+    await pullFromSheet();
+  }
+})();
 </script>
 </body>
 </html>
