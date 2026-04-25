@@ -1243,7 +1243,7 @@ function renderPhotos(p){
   grid.innerHTML = photos.slice().reverse().map((ph,i)=>{
     const idx = photos.length - 1 - i;  // index in chronological array
     const url = r2PublicUrl(ph.key);
-    const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'2-digit'}) : '';
+    const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '';
     return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}"><div class="date">${dt}</div></div>`;
   }).join('');
 }
@@ -1538,6 +1538,59 @@ async function sigv4Request({method, key, body, contentType}){
   return r2;
 }
 
+async function exifDateFromFile(file){
+  // Reads the EXIF DateTimeOriginal (or DateTimeDigitized) from a JPEG.
+  // Returns "YYYY-MM-DD" or null.
+  try {
+    const buf = await file.slice(0, 256 * 1024).arrayBuffer();
+    const view = new DataView(buf);
+    if (view.getUint16(0) !== 0xFFD8) return null;  // not JPEG
+    let offset = 2;
+    while (offset < view.byteLength - 4){
+      if (view.getUint8(offset) !== 0xFF) return null;
+      const marker = view.getUint8(offset + 1);
+      const size = view.getUint16(offset + 2);
+      if (marker === 0xE1){
+        const headerStart = offset + 4;
+        // Check "Exif\0\0"
+        if (view.getUint32(headerStart) === 0x45786966 && view.getUint16(headerStart + 4) === 0x0000){
+          const tiffStart = headerStart + 6;
+          const endian = view.getUint16(tiffStart);
+          if (endian !== 0x4949 && endian !== 0x4D4D) return null;
+          const little = endian === 0x4949;
+          const get16 = (o) => view.getUint16(o, little);
+          const get32 = (o) => view.getUint32(o, little);
+          if (get16(tiffStart + 2) !== 0x002A) return null;
+          const ifd0Offset = tiffStart + get32(tiffStart + 4);
+          const numEntries = get16(ifd0Offset);
+          let exifIfdOffset = null;
+          for (let i = 0; i < numEntries; i++){
+            const e = ifd0Offset + 2 + i * 12;
+            if (get16(e) === 0x8769){ exifIfdOffset = tiffStart + get32(e + 8); break; }
+          }
+          if (!exifIfdOffset) return null;
+          const numExifEntries = get16(exifIfdOffset);
+          for (let i = 0; i < numExifEntries; i++){
+            const e = exifIfdOffset + 2 + i * 12;
+            const tag = get16(e);
+            if (tag === 0x9003 || tag === 0x9004){
+              const valOffset = tiffStart + get32(e + 8);
+              const bytes = new Uint8Array(buf, valOffset, 19);
+              const str = new TextDecoder().decode(bytes);
+              const m = str.match(/^(\d{4}):(\d{2}):(\d{2})/);
+              if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+            }
+          }
+        }
+      }
+      offset += 2 + size;
+    }
+  } catch(e){
+    console.warn('EXIF parse error:', e);
+  }
+  return null;
+}
+
 async function resizeImage(file, maxDim=1600, quality=0.85){
   const url = URL.createObjectURL(file);
   try {
@@ -1560,15 +1613,16 @@ async function resizeImage(file, maxDim=1600, quality=0.85){
 async function uploadPhoto(plant, file){
   const creds = getR2Creds();
   if (!creds.accessKey || !creds.secretKey) throw new Error('Save R2 credentials first (Settings → Photo storage)');
+  const exifDate = await exifDateFromFile(file);
   const blob = await resizeImage(file);
   const buf = await blob.arrayBuffer();
   const slug = plant.id.replace(/^p_/, '');
-  const ts = ymd(today);
+  const photoDate = exifDate || ymd(today);
   const rand = Math.random().toString(36).slice(2,8);
-  const key = `photos/${slug}/${ts}-${rand}.jpg`;
+  const key = `photos/${slug}/${photoDate}-${rand}.jpg`;
   await sigv4Request({ method:'PUT', key, body: buf, contentType:'image/jpeg' });
   if (!plant.photos) plant.photos = [];
-  plant.photos.push({ key, date: ts, caption: '' });
+  plant.photos.push({ key, date: photoDate, caption: '' });
   save();
   return key;
 }
