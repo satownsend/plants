@@ -2720,8 +2720,9 @@ async function ghFetch(){
     cache: 'no-store',
   });
   if (r.status === 404) return {sha:null, data:null};
-  if (!r.ok) throw new Error(`fetch ${r.status}`);
+  if (!r.ok){ console.warn('[sync] GET failed', r.status); throw new Error(`fetch ${r.status}`); }
   const j = await r.json();
+  console.debug('[sync] GET data.json sha:', j.sha);
   return { sha: j.sha, data: JSON.parse(b64utf8(j.content)) };
 }
 
@@ -2734,12 +2735,17 @@ async function ghPut(blob, sha){
     branch: GH.branch,
   };
   if (sha) body.sha = sha;
+  console.debug('[sync] PUT data.json with sha:', sha || '(none)');
   const r = await fetch(url, {
     method:'PUT',
     headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json','Content-Type':'application/json'},
     body: JSON.stringify(body),
   });
-  if (!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(`PUT ${r.status}: ${err.message||''}`); }
+  if (!r.ok){
+    const err = await r.json().catch(()=>({}));
+    console.warn('[sync] PUT failed', r.status, err);
+    throw new Error(`PUT ${r.status}: ${err.message||''}`);
+  }
   const j = await r.json();
   return j.content.sha;
 }
@@ -2846,7 +2852,9 @@ async function pushNow(){
     // Local data is safe in localStorage. Schedule a background retry so the
     // sync recovers without the user having to make another change. Click the
     // chip (or "Push now" in Settings) to retry immediately.
-    setSyncStatus('error · retry pending — tap to retry', 'err');
+    console.error('[sync] pushNow failed:', e);
+    const short = (e && e.message ? e.message : String(e)).replace(/^PUT\s*/, '').slice(0, 80);
+    setSyncStatus(`error: ${short} · tap to retry`, 'err');
     pushRetryTimer = setTimeout(() => { pushRetryTimer = null; pushNow(); }, 30000);
   } finally { syncing = false; }
 }
