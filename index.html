@@ -1730,39 +1730,87 @@ $('#thenNowBtn').onclick = ()=>{
     alert('Need at least two photos for Then vs Now.');
     return;
   }
-  const oldest = photos[0], newest = photos[photos.length-1];
-  const diff = (oldest.date && newest.date)
-    ? plantedDuration(oldest.date).replace(/^(\d)/, '$1 ')  // hacky reuse
-    : '';
-  // Compute apart
-  let apart = '';
-  if (oldest.date && newest.date){
-    const a = parseYMD(oldest.date), b = parseYMD(newest.date);
-    const days = daysBetween(a, b);
-    if (days < 60) apart = `${days} days apart`;
-    else if (days < 365) apart = `${Math.round(days/30)} months apart`;
-    else apart = `${(days/365).toFixed(1)} years apart`;
-  }
+
+  // Build options grouped by year so long histories stay scannable.
+  const groupedOpts = (() => {
+    const byYear = new Map();
+    photos.forEach((ph, i) => {
+      const y = (ph.date || '').slice(0,4) || 'no date';
+      if (!byYear.has(y)) byYear.set(y, []);
+      byYear.get(y).push({ ph, i });
+    });
+    const years = [...byYear.keys()];
+    const useGroups = years.filter(y => y !== 'no date').length > 1;
+    if (!useGroups){
+      return photos.map((ph, i) => `<option value="${i}">${escapeHtml(ph.date || 'no date')}${ph.caption ? ' — ' + escapeHtml(ph.caption) : ''}</option>`).join('');
+    }
+    return years.map(y => {
+      const opts = byYear.get(y).map(({ph, i}) => `<option value="${i}">${escapeHtml(ph.date || 'no date')}${ph.caption ? ' — ' + escapeHtml(ph.caption) : ''}</option>`).join('');
+      return `<optgroup label="${escapeHtml(y)}">${opts}</optgroup>`;
+    }).join('');
+  })();
+
   const grid = $('#infoPhotos');
   grid.innerHTML = `
     <div style="grid-column:1/-1">
+      <div class="then-now-controls" style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end;margin-bottom:10px">
+        <label style="display:block">
+          <span class="small" style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px">Then</span>
+          <select id="thenSel" style="width:100%">${groupedOpts}</select>
+        </label>
+        <button class="ghost tiny" id="thenNowSwap" title="Swap Then and Now" style="margin-bottom:2px">⇄</button>
+        <label style="display:block">
+          <span class="small" style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px">Now</span>
+          <select id="nowSel" style="width:100%">${groupedOpts}</select>
+        </label>
+      </div>
       <div class="then-now">
         <figure>
-          <img src="${r2PublicUrl(oldest.key)}" alt="">
-          <figcaption>Then</figcaption>
-          <div class="age">${oldest.date || ''}</div>
+          <img id="thenImg" alt="">
+          <div class="age" id="thenDate"></div>
         </figure>
         <figure>
-          <img src="${r2PublicUrl(newest.key)}" alt="">
-          <figcaption>Now</figcaption>
-          <div class="age">${newest.date || ''}</div>
+          <img id="nowImg" alt="">
+          <div class="age" id="nowDate"></div>
         </figure>
       </div>
-      <div class="small" style="text-align:center;margin-top:8px;color:var(--muted)">${apart}</div>
+      <div class="small" id="thenNowApart" style="text-align:center;margin-top:8px;color:var(--muted)"></div>
       <div style="text-align:center;margin-top:8px"><button id="thenNowBackBtn" class="ghost tiny">Back to gallery</button></div>
     </div>
   `;
+
+  const update = () => {
+    const ti = parseInt($('#thenSel').value, 10);
+    const ni = parseInt($('#nowSel').value, 10);
+    const a = photos[ti], b = photos[ni];
+    if (!a || !b) return;
+    $('#thenImg').src = r2PublicUrl(a.key);
+    $('#nowImg').src = r2PublicUrl(b.key);
+    $('#thenDate').textContent = a.date || '';
+    $('#nowDate').textContent = b.date || '';
+    let apart = '';
+    if (a.date && b.date){
+      const da = parseYMD(a.date), db = parseYMD(b.date);
+      const days = Math.abs(daysBetween(da, db));
+      if (days === 0) apart = 'same day';
+      else if (days < 60) apart = `${days} days apart`;
+      else if (days < 365) apart = `${Math.round(days/30)} months apart`;
+      else apart = `${(days/365).toFixed(1)} years apart`;
+    }
+    $('#thenNowApart').textContent = apart;
+  };
+
+  $('#thenSel').value = '0';
+  $('#nowSel').value = String(photos.length - 1);
+  $('#thenSel').addEventListener('change', update);
+  $('#nowSel').addEventListener('change', update);
+  $('#thenNowSwap').onclick = () => {
+    const a = $('#thenSel').value, b = $('#nowSel').value;
+    $('#thenSel').value = b; $('#nowSel').value = a;
+    update();
+  };
   $('#thenNowBackBtn').onclick = ()=> renderPhotos(p);
+  update();
 };
 $('#infoClose').onclick = ()=> $('#infoModal').classList.remove('show');
 $('#infoModal').addEventListener('click', e=>{ if (e.target.id==='infoModal') $('#infoModal').classList.remove('show'); });
