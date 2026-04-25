@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scott and Stacy's Plants</title>
+<style>
+  :root{
+    --bg:#0d1611;            /* deep forest, near-black */
+    --bg2:#11201a;           /* lifted panels behind */
+    --panel:#16241d;         /* card */
+    --panel2:#1c2e25;        /* nested */
+    --ink:#e8e4d3;           /* warm birch/moonlight text */
+    --ink-soft:#cdc8b3;
+    --muted:#8a9483;         /* lichen */
+    --line:#243730;          /* moss border */
+    --line2:#2e463c;
+    --accent:#8fc06a;        /* fresh leaf */
+    --accent-deep:#5d8a3e;   /* darker leaf */
+    --accent2:#d49858;       /* warm bark / autumn maple */
+    --warn:#e08a4a;          /* copper warning */
+    --cool:#7ec0c4;          /* lichen blue */
+    --chip:#1f3128;
+    --chip-line:#2c4438;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #1a3025 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, #0f231b 0%, transparent 55%),
+      var(--bg);
+    background-attachment:fixed;
+    color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font:600 24px/1.2 "SF Pro Display",-apple-system,BlinkMacSystemFont,sans-serif;margin:0;letter-spacing:-.01em;color:var(--accent)}
+  h2{font:600 14px/1 "SF Pro Display",sans-serif;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .sub{color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .panel.full{grid-column:1/-1}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);color:var(--ink-soft);border:1px solid var(--chip-line);
+    border-radius:999px;padding:3px 10px;font-size:12px}
+  .chip.warn{background:#3a2418;border-color:#5a3a23;color:#e8a06a}
+  .chip.cool{background:#1a2e30;border-color:#2c4548;color:var(--cool)}
+  .chip.ok{background:#1f3a25;border-color:#2f5235;color:var(--accent)}
+  .chip.muted{background:#222;border-color:#333;color:#888}
+  button,select,input,textarea{font:inherit;color:inherit}
+  button{background:var(--accent);color:#0d1611;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600}
+  button:hover{background:#a3d07c}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line2);font-weight:400}
+  button.ghost:hover{background:var(--panel2);border-color:var(--accent-deep)}
+  button.tiny{padding:3px 8px;font-size:12px;font-weight:400}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;width:100%;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-deep);background:#152821}
+  textarea{min-height:60px;resize:vertical}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font:600 12px/1.2 "SF Pro Display",sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  td .meta{color:var(--muted);font-size:12px}
+  tr:hover td{background:rgba(143,192,106,.04)}
+  .tasks li{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel2);list-style:none}
+  .tasks ul{padding:0;margin:0}
+  .tasks .why{color:var(--muted);font-size:12px;margin-top:2px}
+  .tasks .tag{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 6px;border-radius:4px;margin-right:6px;background:var(--chip);color:var(--ink-soft)}
+  .tasks .tag.water{background:#1a2e30;color:var(--cool)}
+  .tasks .tag.protect{background:#3a2418;color:#e8a06a}
+  .tasks .tag.feed{background:#3a3018;color:#d4b568}
+  .tasks .tag.prune{background:#2e2440;color:#b89edc}
+  .tasks .tag.inspect{background:#1f3a25;color:var(--accent)}
+  .tasks .tag.move{background:#3a2424;color:#d48a8a}
+  .forecast{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .forecast .day{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;font-size:12px}
+  .forecast .day .d{color:var(--muted);font-size:11px}
+  .forecast .day .hi{font-weight:600;font-size:14px;color:var(--ink)}
+  .forecast .day .lo{color:var(--muted)}
+  .forecast .day.frost{background:#15282b;border-color:#2c4a4d}
+  .forecast .day.frost .hi,.forecast .day.frost .lo{color:var(--cool)}
+  .forecast .day.warm{background:#2e2014;border-color:#5a3a23}
+  .forecast .day.warm .hi{color:var(--warn)}
+  .forecast .day.rain{position:relative}
+  .forecast .day .rain{display:block;color:var(--cool);font-size:11px;margin-top:2px}
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .pill{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--chip);color:var(--ink-soft);margin-left:6px;border:1px solid var(--chip-line)}
+  .pill.frost{background:#15282b;color:var(--cool);border-color:#2c4a4d}
+  .pill.tender{background:#3a2418;color:#e8a06a;border-color:#5a3a23}
+  .pill.rip{background:#0a0d0b;color:#9a948a;border-color:#333}
+  tr.dead td{color:#6b6f63;text-decoration:line-through;text-decoration-color:#444}
+  tr.dead td a.namelink{color:#6b6f63}
+  tr.dead td button,tr.dead td .pill{text-decoration:none}
+  .filter-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:13px;color:var(--muted)}
+  .filter-row label{cursor:pointer}
+  a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
+  a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
+  .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-back.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;
+    box-shadow:0 16px 48px rgba(0,0,0,.6);padding:22px 24px;position:relative;color:var(--ink)}
+  .modal h3{margin:0 0 4px;font:600 20px/1.2 "SF Pro Display",sans-serif;letter-spacing:-.01em;color:var(--accent)}
+  .modal .lat{color:var(--muted);font-size:13px;font-style:italic;margin:0 0 14px}
+  .modal .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:13px;margin-bottom:12px}
+  .modal .kv dt{color:var(--muted)}
+  .modal .kv dd{margin:0;color:var(--ink-soft)}
+  .modal .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .modal .links a{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line2);
+    border-radius:8px;font-size:13px;color:var(--ink);background:var(--bg2);text-decoration:none}
+  .modal .links a:hover{background:var(--chip);border-color:var(--accent-deep);color:var(--accent)}
+  .modal .close{position:absolute;top:10px;right:12px;background:transparent;color:var(--muted);font-size:24px;border:0;cursor:pointer;padding:4px 8px;font-weight:300}
+  .modal .close:hover{color:var(--ink)}
+  .topline{font-size:18px;line-height:1.4;margin:0 0 8px}
+  .ghost-input{border:none;background:transparent;padding:0;font:inherit;color:inherit;width:auto}
+  .empty{color:var(--muted);font-size:13px;font-style:italic}
+  hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+  .right{margin-left:auto}
+  .small{font-size:12px;color:var(--muted)}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  @media (max-width:700px){.grid3{grid-template-columns:1fr}.forecast{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Scott and Stacy's Plants</h1>
+    <div class="sub" id="dateline">—</div>
+  </div>
+  <div class="row">
+    <span class="chip" id="locchip">📍 set location</span>
+    <span class="chip" id="frostchip">❄ frost dates</span>
+    <span class="chip" id="syncchip" title="Click to configure">⟳ sync: off</span>
+    <button class="ghost tiny" id="settingsBtn">Settings</button>
+  </div>
+</header>
+
+<div class="panel full" id="briefPanel">
+  <h2>Today's brief</h2>
+  <p class="topline" id="topline">Loading…</p>
+  <div class="tasks"><ul id="taskList"></ul></div>
+</div>
+
+<div class="grid" style="margin-top:16px">
+
+  <div class="panel">
+    <h2>Forecast</h2>
+    <div class="forecast" id="forecast"></div>
+    <div class="small" style="margin-top:8px" id="weatherNote">—</div>
+  </div>
+
+  <div class="panel">
+    <h2>Quick log</h2>
+    <div class="row" style="margin-bottom:8px">
+      <select id="logPlant" style="flex:1;min-width:160px"></select>
+      <select id="logAction" style="width:140px">
+        <option value="watered">watered</option>
+        <option value="fertilized">fertilized</option>
+        <option value="pruned">pruned</option>
+        <option value="sprayed">sprayed</option>
+        <option value="inspected">inspected</option>
+        <option value="moved">moved</option>
+        <option value="repotted">repotted</option>
+        <option value="covered">covered</option>
+        <option value="uncovered">uncovered</option>
+        <option value="note">note</option>
+      </select>
+      <button id="logBtn">Log</button>
+    </div>
+    <input type="text" id="logNote" placeholder="optional note (e.g. deep soak, 1 gal each)">
+    <hr>
+    <div id="recentLog" class="small">No entries yet.</div>
+  </div>
+
+  <div class="panel full">
+    <h2>Plants <span class="small">(click "edit" on a row)</span></h2>
+    <div class="filter-row">
+      <label><input type="checkbox" id="showDead"> Show departed (RIP)</label>
+      <span class="right small" id="plantStats"></span>
+    </div>
+    <table id="plantTable">
+      <thead><tr>
+        <th>Name</th><th>Qty</th><th>Type</th><th>Spot</th><th>Planted</th><th>Last watered</th><th>Last fed</th><th>Notes</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="row" style="margin-top:10px">
+      <button id="addPlantBtn" class="ghost">+ Add plant</button>
+      <span class="right small" id="plantCount"></span>
+    </div>
+  </div>
+
+</div>
+
+<div class="panel full" id="settingsPanel" style="display:none;margin-top:16px">
+  <h2>Settings</h2>
+  <div class="grid3">
+    <div>
+      <label class="small">Location (city, region)</label>
+      <input type="text" id="cityInput" placeholder="e.g. Asheville, NC">
+      <button id="geocodeBtn" class="tiny" style="margin-top:6px">Find</button>
+      <div class="small" id="geoStatus" style="margin-top:4px"></div>
+    </div>
+    <div>
+      <label class="small">Last spring frost (avg)</label>
+      <input type="date" id="lastFrostInput">
+      <label class="small" style="margin-top:8px;display:block">First fall frost (avg)</label>
+      <input type="date" id="firstFrostInput">
+    </div>
+    <div>
+      <label class="small">Units</label>
+      <select id="unitsInput">
+        <option value="F">°F / inches</option>
+        <option value="C">°C / mm</option>
+      </select>
+      <label class="small" style="margin-top:8px;display:block">Hardiness zone (optional)</label>
+      <input type="text" id="zoneInput" placeholder="e.g. 7a">
+    </div>
+  </div>
+  <hr>
+  <div>
+    <h2 style="margin:0 0 8px">GitHub sync</h2>
+    <div class="small" style="margin-bottom:6px">Repo: <code>satownsend/our-plants</code> · file: <code>data.json</code></div>
+    <input type="password" id="ghTokenInput" placeholder="Paste fine-grained PAT (Contents: Read and write)">
+    <div class="row" style="margin-top:8px;gap:6px">
+      <button id="ghSaveTokenBtn" class="tiny">Save token & connect</button>
+      <button id="ghPullBtn" class="tiny ghost">Pull now</button>
+      <button id="ghPushBtn" class="tiny ghost">Push now</button>
+      <button id="ghClearTokenBtn" class="tiny ghost" style="margin-left:auto">Forget token</button>
+    </div>
+    <div class="small" id="ghStatus" style="margin-top:6px;color:var(--muted)">Not connected.</div>
+  </div>
+  <hr>
+  <div class="row">
+    <button id="saveSettings">Save</button>
+    <button id="loadInventoryBtn" class="ghost">Load "Our Trees" inventory</button>
+    <button id="exportBtn" class="ghost">Export data</button>
+    <button id="importBtn" class="ghost">Import</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none">
+    <button id="resetBtn" class="ghost" style="margin-left:auto">Reset all</button>
+  </div>
+</div>
+
+<div class="modal-back" id="infoModal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="close" id="infoClose" aria-label="Close">×</button>
+    <h3 id="infoName"></h3>
+    <p class="lat" id="infoType"></p>
+    <dl class="kv" id="infoKV"></dl>
+    <div id="infoNotes" style="font-size:14px;line-height:1.55;margin-top:6px"></div>
+    <div class="small" style="margin-top:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:11px">Reference links</div>
+    <div class="links" id="infoLinks"></div>
+  </div>
+</div>
+
+<template id="plantEditTpl">
+  <tr class="edit-row"><td colspan="9">
+    <div class="grid3">
+      <div>
+        <label class="small">Name</label>
+        <input type="text" data-f="name">
+        <label class="small" style="margin-top:6px;display:block">Type / cultivar</label>
+        <input type="text" data-f="type" placeholder="e.g. Japanese maple 'Shindeshojo'">
+      </div>
+      <div>
+        <label class="small">Location</label>
+        <input type="text" data-f="spot" placeholder="e.g. front bed, west pot">
+        <label class="small" style="margin-top:6px;display:block">Container?</label>
+        <select data-f="container"><option value="false">In ground</option><option value="true">Container</option></select>
+        <label class="small" style="margin-top:6px;display:block">Quantity</label>
+        <input type="number" data-f="quantity" min="1" step="1">
+      </div>
+      <div>
+        <label class="small">Tags (comma sep)</label>
+        <input type="text" data-f="tags" placeholder="e.g. tender, shade, rose">
+        <label class="small" style="margin-top:6px;display:block">Date purchased</label>
+        <input type="date" data-f="purchased">
+        <label class="small" style="margin-top:6px;display:block"><input type="checkbox" data-f="dead"> Departed (RIP)</label>
+        <label class="small" style="margin-top:6px;display:block">Notes</label>
+        <textarea data-f="notes"></textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button data-act="save">Save</button>
+      <button class="ghost" data-act="cancel">Cancel</button>
+      <button class="ghost" data-act="delete" style="margin-left:auto">Delete</button>
+    </div>
+  </td></tr>
+</template>
+
+<p class="small" style="text-align:center;margin-top:30px">
+  Data lives in your browser only. Use Settings → Export to back it up.
+</p>
+
+</div>
+
+<script>
+/* ---------- storage ---------- */
+const KEY = 'yardDashboard.v4';
+// GitHub sync state (declared up here so save() during init doesn't trip the TDZ)
+const GH = { owner:'satownsend', repo:'our-plants', path:'data.json', branch:'main' };
+const TOKEN_KEY = 'yardDashboard.ghtoken';
+let lastSha = null;
+let syncing = false;
+let syncTimer = null;
+let suspendSync = false;
+function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
+function setToken(t){ if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); }
+const defaultState = {
+  settings: {
+    city: 'Lilly, PA 15938',
+    lat: 40.4238, lon: -78.6231,
+    units: 'F',
+    zone: '6a',
+    lastFrost: '2026-05-13',
+    firstFrost: '2026-10-01',
+  },
+  plants: ourTreesSeed(),
+  log: [],
+  forecast: null,         // cached forecast
+  forecastFetched: 0,     // ms epoch
+};
+
+function uid(){ return Math.random().toString(36).slice(2,10) }
+function ourTreesSeed(){
+  const T = [
+    // ---- living, from "Our Trees" inventory ----
+    {n:"Weeping Pussy Willow", t:"Salix caprea 'Pendula'", s:"Between large black cherry and black walnut trees (replaced stumps)", c:false, tg:"deciduous,weeping", p:"2021-03-25", note:"$89 at purchase."},
+    {n:"Dawn Redwood", t:"Metasequoia glyptostroboides", s:"", c:false, tg:"deciduous-conifer", p:"2021-07-01", note:"$59. ~5 years old at purchase."},
+    {n:"Sango Kaku Japanese Maple", t:"Acer palmatum 'Sango Kaku' (Coral Bark)", s:"Mulch pile near white bench", c:false, tg:"maple,deciduous", p:"2021-05-13", note:"$200. Spring color: green. Coral bark stands out in winter."},
+    {n:"Olsen's Frosted Strawberry Japanese Maple", t:"Acer palmatum \"Olsen's Frosted Strawberry\"", s:"Next to Sango Kaku", c:false, tg:"maple,deciduous,tender", p:"2021-05-16", note:"$90."},
+    {n:"Peaches n Cream Japanese Maple", t:"Acer palmatum 'Peaches n Cream'", s:"Left side of large shed", c:false, tg:"maple,deciduous,tender", p:"2021-05-16", note:"$40. Was 0–1 yrs old at purchase."},
+    {n:"Ukigumo Japanese Maple", t:"Acer palmatum 'Ukigumo' (Floating Clouds)", s:"Next to Sango Kaku", c:false, tg:"maple,deciduous,tender,variegated", p:"2021-05-16", note:"$50. Variegated foliage burns in hot afternoon sun."},
+    {n:"Mikazuki Japanese Maple", t:"Acer palmatum 'Mikazuki'", s:"Right side of large shed", c:false, tg:"maple,deciduous,tender,variegated", p:"2021-05-23", note:"$100."},
+    {n:"Calico Japanese Maple", t:"Acer palmatum 'Calico'", s:"Middle of large shed", c:false, tg:"maple,deciduous,tender,variegated", p:"2021-05-23", note:"$100."},
+    {n:"Kwanzan Cherry", t:"Prunus serrulata 'Kwanzan'", s:"", c:false, tg:"deciduous,flowering", p:"2024-04-01", note:"$25."},
+    {n:"Profusion Crabapple", t:"Malus 'Profusion'", s:"", c:false, tg:"deciduous,flowering,fruit", p:"2024-04-01", note:"$25."},
+    {n:"Shin Deshojo Japanese Maple", t:"Acer palmatum 'Shin Deshojo'", s:"Pot near bird bath", c:true, tg:"maple,deciduous,tender,wind-sensitive,container", p:"2024-04-01", note:"$50. Bright spring foliage burns easily — needs afternoon shade and shelter from wind."},
+    {n:"Moonglow Juniper", t:"Juniperus scopulorum 'Moonglow'", s:"2 near creek, 1 on island near church garage", c:false, tg:"evergreen,conifer", p:"2025-04-01", note:"", qty:3},
+    {n:"Weeping Alaskan Cedar", t:"Cupressus nootkatensis 'Pendula'", s:"", c:false, tg:"evergreen,conifer,weeping", p:"2025-04-01", note:""},
+    {n:"Slender Hinoki Cypress", t:"Chamaecyparis obtusa 'Gracilis'", s:"", c:false, tg:"evergreen,conifer", p:"2025-04-01", note:""},
+    {n:"Soft Serve False Cypress", t:"Chamaecyparis 'Soft Serve'", s:"", c:false, tg:"evergreen,conifer", p:"2024-01-01", note:"Year only known."},
+    {n:"Emerald Green Arborvitae", t:"Thuja occidentalis 'Smaragd'", s:"", c:false, tg:"evergreen,conifer", p:"2024-01-01", note:"Year only known."},
+    {n:"Baby Blue Colorado Spruce", t:"Picea pungens 'Baby Blue'", s:"", c:false, tg:"evergreen,conifer", p:"2025-05-01", note:"Replaced the Fireglow Japanese Maple that died."},
+    {n:"Globe Baby Blue Colorado Spruce", t:"Picea pungens 'Baby Blue Globe'", s:"In front of grapevine", c:false, tg:"evergreen,conifer,dwarf", p:"2025-05-01", note:""},
+    {n:"Wells Special Hinoki Cypress", t:"Chamaecyparis obtusa 'Wells Special'", s:"Along island", c:false, tg:"evergreen,conifer", p:"2025-05-01", note:""},
+    {n:"Hicks Yew", t:"Taxus × media 'Hicksii'", s:"2 pots out front, 2 in back", c:true, tg:"evergreen,conifer,container", p:"2025-01-01", note:"Year only known.", qty:4},
+    {n:"Autumn Gold Gingko", t:"Ginkgo biloba 'Autumn Gold'", s:"Near log", c:false, tg:"deciduous", p:"2026-03-01", note:""},
+    {n:"Contender Peach", t:"Prunus persica 'Contender'", s:"", c:false, tg:"deciduous,fruit,flowering", p:"2026-04-01", note:""},
+    {n:"Schirrmann's Nordlicht Dwarf Dawn Redwood", t:"Metasequoia glyptostroboides 'Schirrmann's Nordlicht'", s:"By garden / weeping Norway spruce", c:false, tg:"deciduous-conifer,variegated,dwarf", p:"2026-04-01", note:"From Mr Maple."},
+    {n:"Asayake Japanese Maple", t:"Acer palmatum 'Asayake'", s:"Hanging pots", c:true, tg:"maple,deciduous,tender,variegated,container", p:"2026-04-01", note:"From Mr Maple."},
+    {n:"Rikuzen Shidare Japanese Maple", t:"Acer palmatum 'Rikuzen Shidare' (Weeping)", s:"Hanging pots", c:true, tg:"maple,deciduous,tender,weeping,container", p:"2026-04-01", note:"From Mr Maple."},
+    {n:"Chirimen Hinoki Cypress", t:"Chamaecyparis obtusa 'Chirimen'", s:"Near big rock", c:false, tg:"evergreen,conifer,dwarf", p:"2026-04-01", note:""},
+    {n:"Wissel's Saguaro Lawson Cypress", t:"Chamaecyparis lawsoniana 'Wissel's Saguaro'", s:"Between garden (by grapevine) and Japanese Maple", c:false, tg:"evergreen,conifer,columnar", p:"2026-04-01", note:"Plan: move dwarf alberta spruce to front of grapevine; move globe blue spruce to where dwarf alberta spruce is now."},
+    {n:"Kohout's Ice Breaker Korean Fir", t:"Abies koreana 'Kohout's Ice Breaker'", s:"Side of house by deck", c:false, tg:"evergreen,conifer,dwarf", p:"", note:""},
+    {n:"Lemon Spreader Oriental Spruce", t:"Picea orientalis 'Lemon Spreader'", s:"Near horseshoe pit / shed / woodpile", c:false, tg:"evergreen,conifer,dwarf", p:"", note:""},
+    {n:"Weeping Blue Atlas Cedar", t:"Cedrus atlantica 'Glauca Pendula'", s:"By the old shed", c:false, tg:"evergreen,conifer,weeping", p:"", note:""},
+    {n:"Weeping Norway Spruce", t:"Picea abies 'Pendula'", s:"Front of workshop border", c:false, tg:"evergreen,conifer,weeping", p:"", note:""},
+    {n:"Weeping White Spruce", t:"Picea glauca 'Pendula'", s:"Woods border", c:false, tg:"evergreen,conifer,weeping", p:"", note:""},
+    // ---- departed (strikethrough in the source) ----
+    {n:"Purple Ghost Japanese Maple", t:"Acer palmatum 'Purple Ghost'", s:"Back of garage, next to deck", c:false, tg:"maple,deciduous", p:"2021-05-08", note:"$130. Spring color: purple.", dead:true},
+    {n:"Spring Delight Japanese Maple", t:"Acer palmatum 'Spring Delight'", s:"Next to grapevine", c:false, tg:"maple,deciduous", p:"2021-05-14", note:"$190. Spring: green/yellow with cranberry tips.", dead:true},
+    {n:"'Columnar' Japanese Maple (Oregon Sunset)", t:"Acer palmatum (sold as 'Columnar', labeled Oregon Sunset)", s:"", c:false, tg:"maple,deciduous", p:"2021-05-25", note:"$137. Was labeled as Oregon Sunset.", dead:true},
+    {n:"Fireglow Japanese Maple", t:"Acer palmatum 'Fireglow'", s:"", c:false, tg:"maple,deciduous", p:"2024-04-01", note:"$120. Replaced by Baby Blue Colorado Spruce.", dead:true},
+    {n:"Mikawa Yatsubusa Japanese Maple", t:"Acer palmatum 'Mikawa Yatsubusa'", s:"", c:false, tg:"maple,deciduous,dwarf", p:"2024-06-01", note:"", dead:true},
+    {n:"Black Tower Elderberry", t:"Sambucus nigra 'Black Tower'", s:"", c:false, tg:"deciduous", p:"", note:"", dead:true},
+    {n:"Weeping White Cherry", t:"Prunus (weeping white)", s:"", c:false, tg:"deciduous,flowering,weeping", p:"2021-07-01", note:"", dead:true},
+  ];
+  return T.map(x=>({
+    id: uid(),
+    name: x.n,
+    type: x.t,
+    spot: x.s,
+    container: !!x.c,
+    tags: x.tg,
+    notes: x.note,
+    purchased: x.p || '',
+    dead: !!x.dead,
+    quantity: x.qty || 1,
+  }));
+}
+function load(){
+  try { return Object.assign({}, defaultState, JSON.parse(localStorage.getItem(KEY)||'{}')); }
+  catch(e){ return structuredClone(defaultState) }
+}
+function saveLocal(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function save(){ saveLocal(); queueSync(); }
+let state = load();
+if (!state.plants || !state.plants.length) state.plants = structuredClone(defaultState.plants);
+// Hardcoded location: always pin to Lilly, PA 15938
+state.settings.city = 'Lilly, PA 15938';
+state.settings.lat = 40.4238;
+state.settings.lon = -78.6231;
+state.settings.zone = state.settings.zone || '6a';
+state.settings.lastFrost = state.settings.lastFrost || '2026-05-13';
+state.settings.firstFrost = state.settings.firstFrost || '2026-10-01';
+save();
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const today = new Date();
+const ymd = d => d.toISOString().slice(0,10);
+const parseYMD = s => s ? new Date(s+'T12:00:00') : null;
+const daysBetween = (a,b) => Math.round((b-a)/86400000);
+const fmtDate = d => d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+function lastLogFor(plantId, action){
+  for (let i=state.log.length-1;i>=0;i--){
+    const e = state.log[i];
+    if (e.plantId===plantId && (!action || e.action===action)) return e;
+  }
+  return null;
+}
+function daysSince(dateStr){
+  if (!dateStr) return null;
+  const d = parseYMD(dateStr);
+  return daysBetween(d, today);
+}
+function plantedDuration(dateStr){
+  if (!dateStr) return '';
+  const d = parseYMD(dateStr);
+  if (!d || isNaN(d)) return '';
+  const diffDays = daysBetween(d, today);
+  if (diffDays < 0) return `planned (${-diffDays}d)`;
+  if (diffDays === 0) return 'today';
+  if (diffDays < 14) return `${diffDays}d`;
+  if (diffDays < 60) return `${Math.floor(diffDays/7)}wk`;
+  let months = (today.getFullYear()-d.getFullYear())*12 + (today.getMonth()-d.getMonth());
+  if (today.getDate() < d.getDate()) months -= 1;
+  if (months < 12) return `${months}mo`;
+  const years = Math.floor(months/12);
+  const rem = months - years*12;
+  return rem ? `${years}y ${rem}mo` : `${years}y`;
+}
+
+/* ---------- header ---------- */
+$('#dateline').textContent = fmtDate(today);
+
+function updateChips(){
+  const s = state.settings;
+  $('#locchip').textContent = '📍 ' + (s.city || 'set location');
+  let frostText = '❄ frost: ';
+  if (s.lastFrost || s.firstFrost){
+    const lf = parseYMD(s.lastFrost), ff = parseYMD(s.firstFrost);
+    const parts = [];
+    if (lf){
+      const d = daysBetween(today, lf);
+      parts.push('last ' + (d>=0 ? `in ${d}d` : `${-d}d ago`));
+    }
+    if (ff){
+      const d = daysBetween(today, ff);
+      parts.push('first ' + (d>=0 ? `in ${d}d` : `${-d}d ago`));
+    }
+    frostText += parts.join(' · ');
+  } else frostText += 'not set';
+  $('#frostchip').textContent = frostText;
+}
+updateChips();
+
+/* ---------- settings panel ---------- */
+function openSettings(){
+  const p = $('#settingsPanel');
+  p.style.display = 'block';
+  $('#cityInput').value = state.settings.city || '';
+  $('#lastFrostInput').value = state.settings.lastFrost || '';
+  $('#firstFrostInput').value = state.settings.firstFrost || '';
+  $('#unitsInput').value = state.settings.units || 'F';
+  $('#zoneInput').value = state.settings.zone || '';
+  if (typeof refreshTokenInput === 'function') refreshTokenInput();
+  p.scrollIntoView({behavior:'smooth', block:'start'});
+}
+$('#settingsBtn').onclick = ()=>{
+  const p = $('#settingsPanel');
+  if (p.style.display === 'block') p.style.display = 'none';
+  else openSettings();
+};
+$('#syncchip').onclick = openSettings;
+$('#syncchip').style.cursor = 'pointer';
+$('#locchip').onclick = openSettings;
+$('#locchip').style.cursor = 'pointer';
+$('#frostchip').onclick = openSettings;
+$('#frostchip').style.cursor = 'pointer';
+$('#saveSettings').onclick = ()=>{
+  state.settings.city = $('#cityInput').value.trim();
+  state.settings.lastFrost = $('#lastFrostInput').value;
+  state.settings.firstFrost = $('#firstFrostInput').value;
+  state.settings.units = $('#unitsInput').value;
+  state.settings.zone = $('#zoneInput').value.trim();
+  save(); updateChips(); fetchForecast(true); render();
+  $('#settingsPanel').style.display='none';
+};
+$('#geocodeBtn').onclick = async ()=>{
+  const q = $('#cityInput').value.trim();
+  if (!q) return;
+  $('#geoStatus').textContent = 'Looking up…';
+  try{
+    const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&name='+encodeURIComponent(q));
+    const j = await r.json();
+    if (j.results && j.results[0]){
+      const g = j.results[0];
+      state.settings.lat = g.latitude;
+      state.settings.lon = g.longitude;
+      state.settings.city = `${g.name}${g.admin1?', '+g.admin1:''}`;
+      $('#cityInput').value = state.settings.city;
+      $('#geoStatus').textContent = `Found: ${g.name} (${g.latitude.toFixed(2)}, ${g.longitude.toFixed(2)})`;
+      save(); updateChips();
+    } else {
+      $('#geoStatus').textContent = 'No match.';
+    }
+  } catch(e){ $('#geoStatus').textContent = 'Lookup failed.'; }
+};
+$('#exportBtn').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `yard-backup-${ymd(today)}.json`;
+  a.click();
+};
+$('#importBtn').onclick = ()=> $('#importFile').click();
+$('#importFile').onchange = (ev)=>{
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{ state = Object.assign({}, defaultState, JSON.parse(r.result)); save(); render(); updateChips(); fetchForecast(true); alert('Imported.'); }
+    catch(e){ alert('Could not parse file.') }
+  };
+  r.readAsText(f);
+};
+$('#loadInventoryBtn').onclick = ()=>{
+  if (!confirm('Replace the current plant list with the 37-tree "Our Trees" inventory? Watering log and settings will be kept.')) return;
+  state.plants = ourTreesSeed();
+  save(); render();
+  alert('Loaded ' + state.plants.length + ' trees (31 living, 6 departed).');
+};
+$('#resetBtn').onclick = ()=>{
+  if (!confirm('Wipe all yard data and start over?')) return;
+  state = structuredClone(defaultState); save(); render(); updateChips(); fetchForecast(true);
+};
+
+/* ---------- forecast ---------- */
+async function fetchForecast(force=false){
+  const s = state.settings;
+  if (!s.lat || !s.lon){
+    $('#forecast').innerHTML = '<div class="empty" style="grid-column:1/-1">Set location in Settings to see the forecast.</div>';
+    $('#weatherNote').textContent = '';
+    return;
+  }
+  const stale = !state.forecast || (Date.now() - state.forecastFetched) > 1000*60*60;
+  if (!force && !stale){ renderForecast(); return; }
+  const tempUnit = s.units==='C' ? 'celsius' : 'fahrenheit';
+  const precipUnit = s.units==='C' ? 'mm' : 'inch';
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}`+
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code`+
+    `&temperature_unit=${tempUnit}&precipitation_unit=${precipUnit}&wind_speed_unit=mph&timezone=auto&forecast_days=7`;
+  try{
+    const r = await fetch(url); const j = await r.json();
+    state.forecast = j.daily; state.forecastFetched = Date.now(); save();
+    renderForecast();
+  } catch(e){
+    $('#weatherNote').textContent = 'Could not fetch forecast.';
+  }
+}
+
+function renderForecast(){
+  const f = state.forecast; if (!f) return;
+  const u = state.settings.units==='C' ? '°C' : '°F';
+  const pu = state.settings.units==='C' ? 'mm' : 'in';
+  const frostThresh = state.settings.units==='C' ? 2 : 36;
+  const warmThresh  = state.settings.units==='C' ? 27 : 80;
+  const days = f.time.map((t,i)=>({
+    date: t,
+    hi: f.temperature_2m_max[i],
+    lo: f.temperature_2m_min[i],
+    pop: f.precipitation_probability_max[i],
+    pcp: f.precipitation_sum[i],
+    wind: f.wind_speed_10m_max[i],
+  }));
+  $('#forecast').innerHTML = days.map(d=>{
+    const dt = new Date(d.date+'T12:00:00');
+    const dow = dt.toLocaleDateString(undefined,{weekday:'short'});
+    const md = dt.toLocaleDateString(undefined,{month:'numeric',day:'numeric'});
+    const cls = d.lo <= frostThresh ? 'frost' : (d.hi >= warmThresh ? 'warm' : '');
+    return `<div class="day ${cls}">
+      <div class="d">${dow} ${md}</div>
+      <div class="hi">${Math.round(d.hi)}${u}</div>
+      <div class="lo">${Math.round(d.lo)}${u}</div>
+      ${d.pop>=30 ? `<span class="rain">☂ ${d.pop}%</span>` : ''}
+    </div>`;
+  }).join('');
+  // weather note
+  const next3 = days.slice(0,3);
+  const minLo = Math.min(...next3.map(d=>d.lo));
+  const maxHi = Math.max(...next3.map(d=>d.hi));
+  const totalPcp = next3.reduce((a,d)=>a+(d.pcp||0),0);
+  const maxWind = Math.max(...next3.map(d=>d.wind||0));
+  const note = [];
+  note.push(`Next 3 days: ${Math.round(minLo)}–${Math.round(maxHi)}${u}`);
+  note.push(`${totalPcp.toFixed(2)} ${pu} precip`);
+  note.push(`gusts to ${Math.round(maxWind)} mph`);
+  $('#weatherNote').textContent = note.join(' · ');
+  state.computed = { days, frostThresh, warmThresh };
+  buildBrief();
+}
+
+/* ---------- brief / tasks ---------- */
+function buildBrief(){
+  const tasks = [];
+  const u = state.settings.units==='C' ? '°C' : '°F';
+  const days = (state.computed && state.computed.days) || [];
+  const frostT = state.computed?.frostThresh ?? 36;
+  const warmT  = state.computed?.warmThresh ?? 80;
+
+  const livePlants = state.plants.filter(p=>!p.dead);
+
+  // Frost / cold protection
+  const coldDays = days.slice(0,5).filter(d=>d.lo <= frostT);
+  if (coldDays.length){
+    const tender = livePlants.filter(p=>/tender|tropical|citrus/i.test(p.tags||''));
+    const containers = livePlants.filter(p=>p.container===true || p.container==='true');
+    const targets = Array.from(new Set([...tender, ...containers].map(p=>p.name)));
+    tasks.push({
+      tag:'protect',
+      title:`Cold ahead — lows to ${Math.round(Math.min(...coldDays.map(d=>d.lo)))}${u} on ${prettyDate(coldDays[0].date)}`,
+      why: targets.length ? `Cover or move: ${targets.slice(0,6).join(', ')}` : 'No tender plants tagged — add tags like "tender" to flag at-risk plants.',
+    });
+  }
+
+  // Heat/wind warning
+  const hotDays = days.slice(0,3).filter(d=>d.hi >= warmT);
+  const windyDays = days.slice(0,3).filter(d=>d.wind >= 20);
+  if (hotDays.length || windyDays.length){
+    const sensitive = livePlants.filter(p=>/wind|tender|maple|fern/i.test((p.tags||'')+' '+(p.type||'')));
+    if (sensitive.length){
+      tasks.push({
+        tag:'move',
+        title: hotDays.length && windyDays.length
+          ? `Hot + windy stretch — protect wind-sensitive plants`
+          : (hotDays.length ? `Heat coming — give shade-lovers afternoon cover`
+                            : `Windy days — move pots to sheltered spots`),
+        why: `Watch: ${sensitive.map(p=>p.name).slice(0,5).join(', ')}`
+      });
+    }
+  }
+
+  // Watering — containers and recently un-watered
+  const dryStretch = days.slice(0,3).every(d=>(d.pop||0) < 40 && (d.pcp||0) < 0.1);
+  const waterTargets = [];
+  for (const p of livePlants){
+    const last = lastLogFor(p.id, 'watered');
+    const since = last ? daysSince(last.date) : 999;
+    const isContainer = p.container===true || p.container==='true';
+    const threshold = isContainer ? 2 : 5;
+    if (since >= threshold && (isContainer || dryStretch)){
+      waterTargets.push({name:p.name, since, container:isContainer});
+    }
+  }
+  if (waterTargets.length){
+    waterTargets.sort((a,b)=>b.since-a.since);
+    const top = waterTargets.slice(0,6).map(t=>`${t.name}${t.container?' (pot)':''} — ${t.since>=999?'never logged':t.since+'d'}`);
+    tasks.push({
+      tag:'water',
+      title:`Water: ${waterTargets.length} plant${waterTargets.length>1?'s':''} due`,
+      why: top.join(' · ')
+    });
+  } else if (days.length && dryStretch){
+    tasks.push({tag:'water',title:'Dry stretch — spot-check beds and deep-soak any wilters', why:'No specific plant overdue based on logs.'});
+  }
+
+  // Rain coming → skip watering note
+  const wet = days.slice(0,2).find(d=>(d.pop||0)>=60 || (d.pcp||0)>=0.25);
+  if (wet){
+    tasks.push({tag:'inspect', title:`Rain likely ${prettyDate(wet.date)} (${wet.pop||0}% / ${wet.pcp||0})`, why:'Skip watering today; check stake ties and mulch washouts after.'});
+  }
+
+  // Seasonal tasks driven by frost dates
+  const lf = parseYMD(state.settings.lastFrost);
+  const ff = parseYMD(state.settings.firstFrost);
+  if (lf){
+    const dToLast = daysBetween(today, lf);
+    if (dToLast > 0 && dToLast <= 14){
+      tasks.push({tag:'protect',title:`Last frost ~${dToLast} days away`, why:'Hold off on planting tender annuals; keep frost cloth handy.'});
+    } else if (dToLast < 0 && dToLast >= -21){
+      tasks.push({tag:'feed',title:`Past last frost (${-dToLast}d) — safe to fertilize most established plants`,
+        why:'Skip feeding anything frost-stressed in the past 10 days.'});
+      tasks.push({tag:'inspect',title:'Check roses for bud swell and new cane growth', why:'Good window to scout for aphids and apply first round of disease prevention.'});
+    }
+  }
+  if (ff){
+    const dToFirst = daysBetween(today, ff);
+    if (dToFirst > 0 && dToFirst <= 30){
+      tasks.push({tag:'protect',title:`First fall frost ~${dToFirst} days away`, why:'Stop fertilizing woody plants; plan to bring tender containers in.'});
+    }
+  }
+
+  // Plants with no recent inspection
+  const stalePlants = livePlants.filter(p=>{
+    const last = lastLogFor(p.id);
+    return !last || daysSince(last.date) >= 14;
+  });
+  if (stalePlants.length){
+    tasks.push({tag:'inspect',title:`Walk-by check: ${stalePlants.length} plant${stalePlants.length>1?'s':''} without notes in 2+ weeks`,
+      why: stalePlants.slice(0,5).map(p=>p.name).join(', ')});
+  }
+
+  // Topline summary — pick the 2 most important
+  const order = ['protect','water','move','feed','prune','inspect'];
+  tasks.sort((a,b)=>order.indexOf(a.tag)-order.indexOf(b.tag));
+  const top = tasks.slice(0,2);
+  $('#topline').textContent = top.length
+    ? top.map(t=>t.title).join(' · ')
+    : 'Nothing urgent. Take a walk through and see what catches your eye.';
+
+  $('#taskList').innerHTML = tasks.length
+    ? tasks.map(t=>`<li><span class="tag ${t.tag}">${t.tag}</span><strong>${escapeHtml(t.title)}</strong><div class="why">${escapeHtml(t.why)}</div></li>`).join('')
+    : '<li class="empty">Nothing flagged today.</li>';
+}
+
+function prettyDate(s){
+  const d = new Date(s+'T12:00:00');
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+}
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+/* ---------- plants table ---------- */
+function renderPlants(){
+  const tb = $('#plantTable tbody');
+  tb.innerHTML = '';
+  const showDead = $('#showDead').checked;
+  const visible = state.plants.filter(p=> showDead || !p.dead);
+  for (const p of visible){
+    const lastW = lastLogFor(p.id,'watered');
+    const lastF = lastLogFor(p.id,'fertilized');
+    const tr = document.createElement('tr');
+    tr.dataset.id = p.id;
+    if (p.dead) tr.classList.add('dead');
+    const tagBadges = (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
+      .map(t=>`<span class="pill ${/tender|frost/i.test(t)?'tender':''}">${escapeHtml(t)}</span>`).join('');
+    const qty = Number(p.quantity)||1;
+    tr.innerHTML = `
+      <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
+      <td>${qty>1?`<strong>${qty}</strong>`:`<span class="meta">${qty}</span>`}</td>
+      <td><span class="meta">${escapeHtml(p.type||'')}</span></td>
+      <td>${escapeHtml(p.spot||'')}</td>
+      <td>${p.purchased ? plantedDuration(p.purchased) : '<span class="meta">—</span>'}</td>
+      <td>${lastW ? `${daysSince(lastW.date)}d ago` : '<span class="meta">—</span>'}</td>
+      <td>${lastF ? `${daysSince(lastF.date)}d ago` : '<span class="meta">—</span>'}</td>
+      <td><span class="meta">${escapeHtml(p.notes||'')}</span></td>
+      <td><button class="ghost tiny" data-edit="${p.id}">edit</button></td>
+    `;
+    tb.appendChild(tr);
+  }
+  const live = state.plants.filter(p=>!p.dead).length;
+  const dead = state.plants.length - live;
+  $('#plantCount').textContent = `${state.plants.length} total`;
+  $('#plantStats').textContent = `${live} living · ${dead} departed`;
+
+  // refresh log dropdown — only living plants
+  const sel = $('#logPlant');
+  sel.innerHTML = state.plants.filter(p=>!p.dead).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    + '<option value="__all__">— all living plants —</option>';
+}
+$('#showDead').addEventListener('change', renderPlants);
+
+$('#plantTable').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-edit]');
+  if (btn){ openEdit(btn.dataset.edit); return; }
+  const link = e.target.closest('a[data-info]');
+  if (link){ e.preventDefault(); openInfo(link.dataset.info); return; }
+});
+
+function openInfo(id){
+  const p = state.plants.find(x=>x.id===id); if (!p) return;
+  $('#infoName').textContent = p.name + (p.dead ? '  †' : '');
+  $('#infoType').textContent = p.type || '';
+  const qty = Number(p.quantity)||1;
+  const rows = [
+    ['Spot', p.spot || '—'],
+    ['Quantity', qty],
+    ['Container', (p.container===true||p.container==='true') ? 'Yes' : 'In ground'],
+    ['Tags', p.tags || '—'],
+    ['Purchased', p.purchased || '—'],
+    ['Planted for', p.purchased ? plantedDuration(p.purchased) : '—'],
+    ['Status', p.dead ? 'Departed (RIP)' : 'Living'],
+  ];
+  $('#infoKV').innerHTML = rows.map(([k,v])=>`<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('');
+  $('#infoNotes').innerHTML = p.notes ? `<em style="color:var(--muted)">Notes:</em> ${escapeHtml(p.notes)}` : '';
+
+  // build search links — pull genus/cultivar out of "type" when possible, else use name
+  const q = (p.type || p.name).replace(/\s+/g,' ').trim();
+  const cultivar = (p.type||'').match(/'([^']+)'/);
+  const cultivarOnly = cultivar ? cultivar[1] : '';
+  const wikiTerm = cultivarOnly || (p.type||p.name).split(/[(,]/)[0].trim();
+  const sites = [
+    {label:'Monrovia',           url:`https://www.monrovia.com/search?q=${encodeURIComponent(q)}`},
+    {label:'Mr Maple',           url:`https://mrmaple.com/search?q=${encodeURIComponent(q)}&type=product`},
+    {label:'Conifer Kingdom',    url:`https://www.coniferkingdom.com/search?q=${encodeURIComponent(q)}&type=product`},
+    {label:'Wikipedia',          url:`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(wikiTerm)}`},
+    {label:'Google Images',      url:`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`},
+  ];
+  $('#infoLinks').innerHTML = sites.map(s=>
+    `<a href="${s.url}" target="_blank" rel="noopener">${s.label} →</a>`
+  ).join('');
+
+  $('#infoModal').classList.add('show');
+}
+$('#infoClose').onclick = ()=> $('#infoModal').classList.remove('show');
+$('#infoModal').addEventListener('click', e=>{ if (e.target.id==='infoModal') $('#infoModal').classList.remove('show'); });
+document.addEventListener('keydown', e=>{ if (e.key==='Escape') $('#infoModal').classList.remove('show'); });
+$('#addPlantBtn').onclick = ()=>{
+  const p = {id:uid(),name:'New plant',type:'',spot:'',container:false,tags:'',notes:''};
+  state.plants.push(p); save(); renderPlants(); openEdit(p.id);
+};
+
+function openEdit(id){
+  const tr = document.querySelector(`tr[data-id="${id}"]`);
+  if (!tr) return;
+  // close other open edits
+  $$('.edit-row').forEach(r=>r.remove());
+  const tpl = $('#plantEditTpl').content.cloneNode(true);
+  const row = tpl.querySelector('tr');
+  const p = state.plants.find(x=>x.id===id);
+  row.querySelectorAll('[data-f]').forEach(el=>{
+    const k = el.dataset.f;
+    if (el.type === 'checkbox') el.checked = !!p[k];
+    else el.value = p[k]==null?'':String(p[k]);
+  });
+  tr.after(row);
+  row.querySelector('[data-act=save]').onclick = ()=>{
+    row.querySelectorAll('[data-f]').forEach(el=>{
+      const k = el.dataset.f;
+      if (el.type === 'checkbox') p[k] = el.checked;
+      else if (k === 'container') p[k] = el.value === 'true';
+      else p[k] = el.value;
+    });
+    save(); renderPlants(); buildBrief();
+  };
+  row.querySelector('[data-act=cancel]').onclick = ()=> row.remove();
+  row.querySelector('[data-act=delete]').onclick = ()=>{
+    if (!confirm(`Delete "${p.name}"?`)) return;
+    state.plants = state.plants.filter(x=>x.id!==id);
+    save(); renderPlants(); buildBrief();
+  };
+}
+
+/* ---------- log ---------- */
+$('#logBtn').onclick = ()=>{
+  const pid = $('#logPlant').value;
+  const action = $('#logAction').value;
+  const note = $('#logNote').value.trim();
+  const date = ymd(today);
+  const targets = pid==='__all__' ? state.plants.map(p=>p.id) : [pid];
+  for (const t of targets){
+    state.log.push({id:uid(), plantId:t, action, note, date});
+  }
+  $('#logNote').value = '';
+  save(); renderPlants(); renderLog(); buildBrief();
+};
+function renderLog(){
+  const recent = state.log.slice(-10).reverse();
+  if (!recent.length){ $('#recentLog').innerHTML = '<span class="empty">No entries yet.</span>'; return; }
+  $('#recentLog').innerHTML = '<table><thead><tr><th>Date</th><th>Plant</th><th>Action</th><th>Note</th></tr></thead><tbody>'
+    + recent.map(e=>{
+      const p = state.plants.find(x=>x.id===e.plantId);
+      return `<tr><td>${e.date}</td><td>${escapeHtml(p?p.name:'?')}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+    }).join('')
+    + '</tbody></table>';
+}
+
+/* ---------- GitHub sync ---------- */
+// (GH, TOKEN_KEY, getToken, setToken, lastSha, syncing, syncTimer, suspendSync hoisted to top)
+
+function utf8b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+function b64utf8(s){ return decodeURIComponent(escape(atob(s.replace(/\n/g,'')))); }
+
+function syncBlob(){
+  return { plants: state.plants, log: state.log, settings: state.settings };
+}
+
+async function ghFetch(){
+  const t = getToken(); if (!t) throw new Error('no token');
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}?ref=${GH.branch}`;
+  const r = await fetch(url, {headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json'}});
+  if (r.status === 404) return {sha:null, data:null};
+  if (!r.ok) throw new Error(`fetch ${r.status}`);
+  const j = await r.json();
+  return { sha: j.sha, data: JSON.parse(b64utf8(j.content)) };
+}
+
+async function ghPut(blob, sha){
+  const t = getToken(); if (!t) throw new Error('no token');
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}`;
+  const body = {
+    message: `yard: update ${new Date().toISOString().slice(0,16).replace('T',' ')}`,
+    content: utf8b64(JSON.stringify(blob, null, 2)),
+    branch: GH.branch,
+  };
+  if (sha) body.sha = sha;
+  const r = await fetch(url, {
+    method:'PUT',
+    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json','Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(`PUT ${r.status}: ${err.message||''}`); }
+  const j = await r.json();
+  return j.content.sha;
+}
+
+function setSyncStatus(label, kind){
+  const chip = $('#syncchip');
+  const status = $('#ghStatus');
+  chip.textContent = '⟳ ' + label;
+  chip.style.background = kind==='ok' ? '#1f3a25' : kind==='err' ? '#3a2418' : 'var(--chip)';
+  chip.style.color = kind==='ok' ? 'var(--accent)' : kind==='err' ? '#e8a06a' : 'var(--ink-soft)';
+  if (status) status.textContent = label;
+}
+
+async function pullFromRemote(){
+  if (!getToken() || syncing) return;
+  syncing = true;
+  try {
+    setSyncStatus('pulling…');
+    const remote = await ghFetch();
+    if (remote && remote.data){
+      // Merge: remote is authoritative for plants/settings; log is unioned by id
+      const remoteIds = new Set((remote.data.log||[]).map(e=>e.id));
+      const localOnly = (state.log||[]).filter(e=>e.id && !remoteIds.has(e.id));
+      const hadLocalPending = localOnly.length > 0;
+      state.plants = remote.data.plants || state.plants;
+      state.log = [...(remote.data.log||[]), ...localOnly];
+      const remoteSettings = remote.data.settings || {};
+      state.settings = {...state.settings, ...remoteSettings};
+      // re-pin hardcoded location
+      state.settings.city = 'Lilly, PA 15938';
+      state.settings.lat = 40.4238;
+      state.settings.lon = -78.6231;
+      lastSha = remote.sha;
+      suspendSync = true; saveLocal(); suspendSync = false;
+      render();
+      setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
+      if (hadLocalPending) setTimeout(pushNow, 200);
+    } else {
+      // First time — push current state up directly (don't call pushNow, it'd re-enter guard)
+      setSyncStatus('pushing initial…');
+      const sha = await ghPut(syncBlob(), null);
+      lastSha = sha;
+      suspendSync = true; saveLocal(); suspendSync = false;
+      setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
+    }
+  } catch(e){
+    setSyncStatus('error: '+e.message, 'err');
+  } finally { syncing = false; }
+}
+
+async function pushNow(){
+  if (!getToken() || syncing) return;
+  syncing = true;
+  try {
+    setSyncStatus('pushing…');
+    // Refetch sha + merge log first to avoid clobbering remote-only entries
+    let remote = null;
+    try { remote = await ghFetch(); } catch(e){ if (!/^fetch /.test(e.message)) throw e; }
+    let mergedLog = state.log;
+    if (remote && remote.data && remote.data.log){
+      const localIds = new Set((state.log||[]).map(e=>e.id));
+      const remoteOnly = remote.data.log.filter(e=>e.id && !localIds.has(e.id));
+      mergedLog = [...remoteOnly, ...state.log];
+    }
+    state.log = mergedLog;
+    const blob = syncBlob();
+    const newSha = await ghPut(blob, remote ? remote.sha : null);
+    lastSha = newSha;
+    suspendSync = true; saveLocal(); suspendSync = false;
+    setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
+  } catch(e){
+    setSyncStatus('error: '+e.message, 'err');
+  } finally { syncing = false; }
+}
+
+function queueSync(){
+  if (suspendSync || !getToken()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushNow, 1500);
+}
+
+// Settings panel handlers
+function refreshTokenInput(){
+  const t = getToken();
+  $('#ghTokenInput').value = t ? '••••••••' + t.slice(-4) : '';
+  if (t) setSyncStatus('idle', 'ok');
+  else setSyncStatus('sync: off');
+}
+$('#ghSaveTokenBtn').onclick = async ()=>{
+  const v = $('#ghTokenInput').value.trim();
+  if (!v || v.startsWith('•')) { alert('Paste a fresh token first.'); return; }
+  setToken(v); refreshTokenInput();
+  await pullFromRemote();
+};
+$('#ghPullBtn').onclick = pullFromRemote;
+$('#ghPushBtn').onclick = pushNow;
+$('#ghClearTokenBtn').onclick = ()=>{
+  if (!confirm('Forget the GitHub token on this device? (Repo data stays.)')) return;
+  setToken(''); refreshTokenInput(); setSyncStatus('sync: off');
+};
+
+/* ---------- render ---------- */
+function render(){ renderPlants(); renderLog(); buildBrief(); }
+render();
+fetchForecast();
+refreshTokenInput();
+if (getToken()){
+  pullFromRemote();
+  setInterval(pullFromRemote, 60000);
+}
+</script>
+</body>
+</html>
