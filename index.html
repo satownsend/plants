@@ -200,6 +200,19 @@
   tr.dead td button,tr.dead td .pill{text-decoration:none}
   .filter-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:13px;color:var(--muted)}
   .filter-row label{cursor:pointer}
+  .cols-pop{position:absolute;top:calc(100% + 6px);left:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;box-shadow:var(--shadow);z-index:5;min-width:180px}
+  .cols-pop label{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--ink);font-size:13px;cursor:pointer}
+  .cols-pop label input[type=checkbox]{margin:0}
+  #plantTable.hide-qty [data-col="qty"],
+  #plantTable.hide-type [data-col="type"],
+  #plantTable.hide-location [data-col="location"],
+  #plantTable.hide-planted [data-col="planted"],
+  #plantTable.hide-price [data-col="price"],
+  #plantTable.hide-watered [data-col="watered"],
+  #plantTable.hide-fed [data-col="fed"],
+  #plantTable.hide-notes [data-col="notes"]{display:none}
+  #plantTable td[data-col="price"]{font-variant-numeric:tabular-nums;white-space:nowrap}
   a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
   a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -436,20 +449,25 @@
     <h2>Plants <span class="small">(click "edit" on a row)</span></h2>
     <div class="filter-row">
       <label><input type="checkbox" id="showDead"> Show departed (RIP)</label>
+      <span style="position:relative">
+        <button class="ghost tiny" id="colsBtn" aria-haspopup="true" aria-expanded="false">⚙ columns</button>
+        <div class="cols-pop" id="colsPop" role="dialog" aria-label="Show/hide columns" style="display:none"></div>
+      </span>
       <span class="right small" id="plantStats"></span>
     </div>
     <div class="table-scroll">
       <table id="plantTable">
         <thead><tr>
-          <th data-sort="name">Name</th>
-          <th data-sort="qty">Qty</th>
-          <th data-sort="type">Type</th>
-          <th data-sort="location">Location</th>
-          <th data-sort="planted">Planted</th>
-          <th data-sort="watered">Last watered</th>
-          <th data-sort="fed">Last fed</th>
-          <th data-sort="notes">Notes</th>
-          <th></th>
+          <th data-sort="name" data-col="name">Name</th>
+          <th data-sort="qty" data-col="qty">Qty</th>
+          <th data-sort="type" data-col="type">Type</th>
+          <th data-sort="location" data-col="location">Location</th>
+          <th data-sort="planted" data-col="planted">Planted</th>
+          <th data-sort="price" data-col="price">Price</th>
+          <th data-sort="watered" data-col="watered">Last watered</th>
+          <th data-sort="fed" data-col="fed">Last fed</th>
+          <th data-sort="notes" data-col="notes">Notes</th>
+          <th data-col="edit"></th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -608,7 +626,7 @@
 </div>
 
 <template id="plantEditTpl">
-  <tr class="edit-row"><td colspan="9">
+  <tr class="edit-row"><td colspan="10">
     <div class="grid3">
       <div>
         <label class="small">Name</label>
@@ -623,6 +641,8 @@
         <select data-f="container"><option value="false">In ground</option><option value="true">Container</option></select>
         <label class="small" style="margin-top:6px;display:block">Quantity</label>
         <input type="number" data-f="quantity" min="1" step="1">
+        <label class="small" style="margin-top:6px;display:block">Price (each, $)</label>
+        <input type="number" data-f="price" min="0" step="0.01" placeholder="e.g. 50">
       </div>
       <div>
         <label class="small">Tags (comma sep)</label>
@@ -747,6 +767,22 @@ function saveLocal(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function save(){ saveLocal(); queueSync(); }
 let state = load();
 if (!state.plants || !state.plants.length) state.plants = structuredClone(defaultState.plants);
+// Migration: extract leading "$NN" or "$NN.NN" from notes into p.price.
+// Older versions stored price inline in notes via csvToPlants; this moves it
+// to a dedicated field. Idempotent: skips plants that already have p.price.
+(function migratePrice(){
+  let touched = false;
+  for (const p of state.plants){
+    if (p.price !== undefined && p.price !== '' && p.price !== null) continue;
+    const m = String(p.notes||'').match(/^\$\s*([0-9]+(?:\.[0-9]{1,2})?)\.?\s*/);
+    if (m){
+      p.price = parseFloat(m[1]);
+      p.notes = String(p.notes).slice(m[0].length).trim();
+      touched = true;
+    }
+  }
+  if (touched) saveLocal();
+})();
 // Hardcoded location: always pin to Lilly, PA 15938
 state.settings.city = 'Lilly, PA 15938';
 state.settings.lat = 40.4238;
@@ -1390,6 +1426,7 @@ const sortFns = {
   type:    (a,b) => (a.type||'').localeCompare(b.type||''),
   location:(a,b) => (a.spot||'').localeCompare(b.spot||''),
   planted: (a,b) => (a.purchased||'9999-99-99').localeCompare(b.purchased||'9999-99-99'),
+  price:   (a,b) => (Number(a.price)||0) - (Number(b.price)||0),
   watered: (a,b) => {
     const la = lastLogFor(a.id,'watered'), lb = lastLogFor(b.id,'watered');
     return (la?la.date:'0').localeCompare(lb?lb.date:'0');
@@ -1400,6 +1437,29 @@ const sortFns = {
   },
   notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
 };
+const COL_KEYS = ['qty','type','location','planted','price','watered','fed','notes'];
+const COL_LABELS = {qty:'Qty', type:'Type', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
+const COL_VIS_KEY = 'yardDashboard.colVisibility';
+function loadColVis(){
+  try {
+    const arr = JSON.parse(localStorage.getItem(COL_VIS_KEY)||'[]');
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+function saveColVis(hidden){
+  localStorage.setItem(COL_VIS_KEY, JSON.stringify([...hidden]));
+}
+let hiddenCols = loadColVis();
+function applyColVisibility(){
+  const t = $('#plantTable');
+  if (!t) return;
+  for (const k of COL_KEYS) t.classList.toggle('hide-'+k, hiddenCols.has(k));
+}
+function fmtPrice(n){
+  const num = Number(n);
+  if (!num || isNaN(num)) return '';
+  return num % 1 === 0 ? '$'+num : '$'+num.toFixed(2);
+}
 function applySortIndicator(){
   $$('#plantTable th[data-sort]').forEach(th=>{
     th.classList.remove('sort-active','sort-desc');
@@ -1434,23 +1494,27 @@ function renderPlants(){
     const cellType = p.type ? `<span class="meta">${escapeHtml(p.type)}</span>` : '';
     const cellSpot = p.spot ? escapeHtml(p.spot) : '';
     const cellPlanted = p.purchased ? plantedDuration(p.purchased) : '';
+    const priceFormatted = fmtPrice(p.price);
+    const cellPrice = priceFormatted ? escapeHtml(priceFormatted) : '';
     const cellWatered = lastW ? `${daysSince(lastW.date)}d ago` : '';
     const cellFed = lastF ? `${daysSince(lastF.date)}d ago` : '';
     const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
-      <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${stagePill}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
-      <td data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
-      <td data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
-      <td data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
-      <td data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
-      <td data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
-      <td data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
-      <td data-label="Notes" class="${empty(cellNotes)}">${cellNotes||'<span class="meta">—</span>'}</td>
-      <td><button class="ghost tiny" data-edit="${p.id}">edit</button></td>
+      <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${stagePill}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
+      <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
+      <td data-col="type" data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
+      <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
+      <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
+      <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
+      <td data-col="watered" data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
+      <td data-col="fed" data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
+      <td data-col="notes" data-label="Notes" class="${empty(cellNotes)}">${cellNotes||'<span class="meta">—</span>'}</td>
+      <td data-col="edit"><button class="ghost tiny" data-edit="${p.id}">edit</button></td>
     `;
     tb.appendChild(tr);
   }
+  applyColVisibility();
   const live = state.plants.filter(p=>!p.dead).length;
   const dead = state.plants.length - live;
   $('#plantCount').textContent = `${state.plants.length} total`;
@@ -1462,6 +1526,38 @@ function renderPlants(){
     + '<option value="__all__">— all living plants —</option>';
 }
 $('#showDead').addEventListener('change', renderPlants);
+
+// Columns popover
+function buildColsPop(){
+  const pop = $('#colsPop');
+  pop.innerHTML = COL_KEYS.map(k =>
+    `<label><input type="checkbox" data-col-toggle="${k}" ${hiddenCols.has(k)?'':'checked'}> ${COL_LABELS[k]}</label>`
+  ).join('');
+}
+$('#colsBtn').onclick = (e)=>{
+  e.stopPropagation();
+  const pop = $('#colsPop');
+  const open = pop.style.display === 'none' || !pop.style.display;
+  if (open) buildColsPop();
+  pop.style.display = open ? 'block' : 'none';
+  $('#colsBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+};
+$('#colsPop').addEventListener('click', e => e.stopPropagation());
+$('#colsPop').addEventListener('change', (e)=>{
+  const t = e.target.closest('input[data-col-toggle]'); if (!t) return;
+  const k = t.dataset.colToggle;
+  if (t.checked) hiddenCols.delete(k);
+  else hiddenCols.add(k);
+  saveColVis(hiddenCols);
+  applyColVisibility();
+});
+document.addEventListener('click', (e)=>{
+  const pop = $('#colsPop');
+  if (pop && pop.style.display === 'block' && !pop.contains(e.target) && e.target.id !== 'colsBtn'){
+    pop.style.display = 'none';
+    $('#colsBtn').setAttribute('aria-expanded', 'false');
+  }
+});
 $$('#plantTable th[data-sort]').forEach(th=>{
   th.addEventListener('click', ()=>{
     const col = th.dataset.sort;
@@ -1731,6 +1827,10 @@ function openEdit(id){
       const k = el.dataset.f;
       if (el.type === 'checkbox') p[k] = el.checked;
       else if (k === 'container') p[k] = el.value === 'true';
+      else if (k === 'price'){
+        const v = el.value.trim();
+        p[k] = v === '' ? '' : (parseFloat(v) || '');
+      }
       else p[k] = el.value;
     });
     save(); renderPlants(); buildBrief();
@@ -2130,8 +2230,12 @@ function csvToPlants(rows, existingByName){
     const name = (row[cName]||'').trim();
     if (!name) continue;
     const existing = existingByName.get(name.toLowerCase()) || {};
+    let price = '';
+    if (cPrice>=0 && row[cPrice]){
+      const m = String(row[cPrice]).match(/[0-9]+(?:\.[0-9]{1,2})?/);
+      if (m) price = parseFloat(m[0]);
+    }
     const noteParts = [];
-    if (cPrice>=0 && row[cPrice]) noteParts.push(`$${String(row[cPrice]).replace(/^\$/,'')}`);
     if (cAge>=0 && row[cAge])     noteParts.push(`Age at purchase: ${row[cAge]}`);
     if (cSp>=0 && row[cSp])       noteParts.push(`Spring: ${row[cSp]}`);
     if (cSu>=0 && row[cSu])       noteParts.push(`Summer: ${row[cSu]}`);
@@ -2150,6 +2254,7 @@ function csvToPlants(rows, existingByName){
       container: isContainer || !!existing.container,
       tags: existing.tags || '',
       notes: noteParts.join('. ').trim(),
+      price: price !== '' ? price : (existing.price || ''),
       purchased: cDate>=0 ? normalizeDate(row[cDate]) : '',
       dead: isDead,
       quantity: cQty>=0 ? Math.max(1, parseInt(row[cQty]||'1', 10) || 1) : 1,
@@ -2531,11 +2636,13 @@ function renderStats(){
     if (!y || y < 1900 || y > 2100) continue;
     const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
     acquired.set(y, (acquired.get(y)||0) + qty);
-    const m = String(p.notes||'').match(/\$\s*([0-9]+(?:\.[0-9]{1,2})?)/);
-    if (m){
-      const price = parseFloat(m[1]);
-      if (!isNaN(price)) spent.set(y, (spent.get(y)||0) + price * qty);
+    let price = Number(p.price);
+    if (!price || isNaN(price)){
+      // Fall back to legacy notes-prefix in case migration hasn't run yet
+      const m = String(p.notes||'').match(/^\$\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+      if (m) price = parseFloat(m[1]);
     }
+    if (price && !isNaN(price)) spent.set(y, (spent.get(y)||0) + price * qty);
   }
   drawYearBars('#statsBars', acquired, n => String(n), 'Plants acquired per year',
     'No purchase dates recorded.', 'var(--accent)');
