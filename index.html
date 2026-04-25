@@ -472,7 +472,7 @@
     <button class="close" id="lightboxClose" style="position:absolute;top:-6px;right:-6px;color:#fff;font-size:28px">×</button>
     <img id="lightboxImg" style="max-width:96vw;max-height:80vh;object-fit:contain;border-radius:8px;background:#0a0a0a">
     <div id="lightboxMeta" style="color:#ddd;font-size:13px;text-align:center;max-width:96vw;padding:0 12px">
-      <div id="lightboxDate" style="font-weight:600"></div>
+      <input type="date" id="lightboxDate" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:5px 10px;font-weight:600;text-align:center;color-scheme:dark">
       <input type="text" id="lightboxCaption" placeholder="add caption…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 10px;margin-top:6px;width:280px;max-width:90vw">
       <div style="margin-top:8px;display:flex;gap:8px;justify-content:center">
         <button id="lightboxPrev" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">‹ Prev</button>
@@ -507,7 +507,7 @@
           <button id="thenNowBtn" class="ghost tiny">Then vs Now</button>
           <label class="ghost tiny" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;border:1px solid var(--line2);border-radius:8px;padding:5px 10px;background:transparent;color:var(--ink);font-size:12px">
             + Add
-            <input type="file" id="photoUploadInput" accept="image/*" capture="environment" multiple style="display:none">
+            <input type="file" id="photoUploadInput" accept="image/*,.heic,.heif" capture="environment" multiple style="display:none">
           </label>
         </div>
       </div>
@@ -1267,7 +1267,7 @@ function showLightboxIdx(){
   const photos = state._lightboxPhotos || [];
   const ph = photos[lightboxIdx]; if (!ph) return;
   $('#lightboxImg').src = r2PublicUrl(ph.key);
-  $('#lightboxDate').textContent = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'long',day:'numeric',year:'numeric'}) : '';
+  $('#lightboxDate').value = ph.date || '';
   $('#lightboxCaption').value = ph.caption || '';
 }
 $('#lightboxClose').onclick = ()=> $('#lightbox').classList.remove('show');
@@ -1277,11 +1277,21 @@ $('#lightboxNext').onclick = ()=>{ const n = (state._lightboxPhotos||[]).length;
 $('#lightboxCaption').addEventListener('change', ()=>{
   const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
-  // Find the same photo in p.photos by key
   const target = (p.photos||[]).find(x=>x.key===ph.key); if (!target) return;
   target.caption = $('#lightboxCaption').value;
   ph.caption = target.caption;
   save();
+});
+$('#lightboxDate').addEventListener('change', ()=>{
+  const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
+  const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
+  const target = (p.photos||[]).find(x=>x.key===ph.key); if (!target) return;
+  const newDate = $('#lightboxDate').value;
+  if (!newDate) return;
+  target.date = newDate;
+  ph.date = newDate;
+  save();
+  renderPhotos(p);
 });
 $('#lightboxDelete').onclick = async ()=>{
   if (!confirm('Delete this photo? (Removes from R2 too.)')) return;
@@ -1311,10 +1321,10 @@ $('#photoUploadInput').addEventListener('change', async (e)=>{
   const status = $('#photoStatus');
   let ok = 0, fail = 0;
   for (let i=0; i<files.length; i++){
-    status.textContent = `Uploading ${i+1}/${files.length}…`;
-    status.style.color = 'var(--muted)';
-    try { await uploadPhoto(p, files[i]); ok++; }
-    catch(err){ fail++; console.error(err); status.textContent = 'Error: '+err.message; status.style.color = '#e8a06a'; }
+    const onStatus = (m)=>{ status.textContent = `Photo ${i+1}/${files.length}: ${m}`; status.style.color = 'var(--muted)'; };
+    onStatus('starting');
+    try { await uploadPhoto(p, files[i], onStatus); ok++; }
+    catch(err){ fail++; console.error(err); status.textContent = `Photo ${i+1} error: `+err.message; status.style.color = '#e8a06a'; }
   }
   if (!fail){
     status.textContent = `Uploaded ${ok} photo${ok>1?'s':''}.`;
@@ -1538,6 +1548,23 @@ async function sigv4Request({method, key, body, contentType}){
   return r2;
 }
 
+function isHeic(file){
+  return /^image\/hei[cf]/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+}
+let _heic2anyPromise = null;
+function loadHeic2Any(){
+  if (_heic2anyPromise) return _heic2anyPromise;
+  _heic2anyPromise = new Promise((resolve, reject) => {
+    if (window.heic2any) return resolve(window.heic2any);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload = () => window.heic2any ? resolve(window.heic2any) : reject(new Error('heic2any global missing'));
+    s.onerror = () => { _heic2anyPromise = null; reject(new Error('Failed to load HEIC converter (offline?)')); };
+    document.head.appendChild(s);
+  });
+  return _heic2anyPromise;
+}
+
 async function exifDateFromFile(file){
   // Reads the EXIF DateTimeOriginal (or DateTimeDigitized) from a JPEG.
   // Returns "YYYY-MM-DD" or null.
@@ -1610,16 +1637,33 @@ async function resizeImage(file, maxDim=1600, quality=0.85){
   } finally { URL.revokeObjectURL(url); }
 }
 
-async function uploadPhoto(plant, file){
+async function uploadPhoto(plant, file, onStatus){
   const creds = getR2Creds();
   if (!creds.accessKey || !creds.secretKey) throw new Error('Save R2 credentials first (Settings → Photo storage)');
-  const exifDate = await exifDateFromFile(file);
-  const blob = await resizeImage(file);
+  // Try EXIF date BEFORE conversion (HEIC EXIF may not survive heic2any)
+  let exifDate = await exifDateFromFile(file);
+  let workingFile = file;
+  if (isHeic(file)){
+    if (onStatus) onStatus('Converting HEIC…');
+    const heic2any = await loadHeic2Any();
+    const jpegBlob = await heic2any({ blob: file, toType:'image/jpeg', quality: 0.92 });
+    workingFile = new File([jpegBlob], (file.name || 'photo').replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
+    if (!exifDate) exifDate = await exifDateFromFile(workingFile);
+  }
+  if (onStatus) onStatus('Resizing…');
+  const blob = await resizeImage(workingFile);
   const buf = await blob.arrayBuffer();
   const slug = plant.id.replace(/^p_/, '');
-  const photoDate = exifDate || ymd(today);
+  // Date precedence: EXIF → file.lastModified (if sane) → today
+  let photoDate = exifDate;
+  if (!photoDate && file.lastModified){
+    const d = new Date(file.lastModified);
+    if (d.getFullYear() >= 2000 && d <= new Date()) photoDate = ymd(d);
+  }
+  photoDate = photoDate || ymd(today);
   const rand = Math.random().toString(36).slice(2,8);
   const key = `photos/${slug}/${photoDate}-${rand}.jpg`;
+  if (onStatus) onStatus('Uploading…');
   await sigv4Request({ method:'PUT', key, body: buf, contentType:'image/jpeg' });
   if (!plant.photos) plant.photos = [];
   plant.photos.push({ key, date: photoDate, caption: '' });
