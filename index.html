@@ -667,6 +667,13 @@ state.settings.lon = -78.6231;
 state.settings.zone = state.settings.zone || '6a';
 state.settings.lastFrost = state.settings.lastFrost || '2026-05-13';
 state.settings.firstFrost = state.settings.firstFrost || '2026-10-01';
+// Hardcoded R2 photo storage config (always pinned)
+state.settings.r2 = {
+  enabled: true,
+  bucket: 'plant-photos',
+  accountId: '5321847b835f166ceacebf2c8c142610',
+  publicUrl: 'https://pub-59a926166fd84970bea75caf38a52d27.r2.dev',
+};
 save();
 
 /* ---------- helpers ---------- */
@@ -1744,10 +1751,16 @@ async function pullFromRemote(){
       state.log = [...(remote.data.log||[]), ...localOnly];
       const remoteSettings = remote.data.settings || {};
       state.settings = {...state.settings, ...remoteSettings};
-      // re-pin hardcoded location
+      // re-pin hardcoded location + R2 config
       state.settings.city = 'Lilly, PA 15938';
       state.settings.lat = 40.4238;
       state.settings.lon = -78.6231;
+      state.settings.r2 = {
+        enabled: true,
+        bucket: 'plant-photos',
+        accountId: '5321847b835f166ceacebf2c8c142610',
+        publicUrl: 'https://pub-59a926166fd84970bea75caf38a52d27.r2.dev',
+      };
       lastSha = remote.sha;
       suspendSync = true; saveLocal(); suspendSync = false;
       render();
