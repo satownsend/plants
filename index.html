@@ -513,9 +513,9 @@
       <table id="plantTable">
         <thead><tr>
           <th data-sort="name" data-col="name">Name</th>
+          <th data-sort="type" data-col="type">Latin name</th>
           <th data-sort="qty" data-col="qty">Qty</th>
           <th data-sort="category" data-col="category">Type</th>
-          <th data-sort="type" data-col="type">Latin name</th>
           <th data-sort="location" data-col="location">Location</th>
           <th data-sort="planted" data-col="planted">Planted</th>
           <th data-sort="price" data-col="price">Price</th>
@@ -1535,7 +1535,7 @@ const sortFns = {
   },
   notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
 };
-const COL_KEYS = ['qty','category','type','location','planted','price','watered','fed','notes'];
+const COL_KEYS = ['type','qty','category','location','planted','price','watered','fed','notes'];
 const COL_LABELS = {qty:'Qty', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
 const COL_VIS_KEY = 'yardDashboard.colVisibility';
 function loadColVis(){
@@ -1608,9 +1608,9 @@ function renderPlants(){
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
       <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${stagePill}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
+      <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
-      <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
       <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
       <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
