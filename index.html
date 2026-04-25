@@ -213,6 +213,13 @@
   #plantTable.hide-fed [data-col="fed"],
   #plantTable.hide-notes [data-col="notes"]{display:none}
   #plantTable td[data-col="price"]{font-variant-numeric:tabular-nums;white-space:nowrap}
+  #infoHistory{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  #infoHistory table{width:100%;border-collapse:collapse;font-size:12px}
+  #infoHistory th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  #infoHistory td{padding:5px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+  #infoHistory td.when{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
+  #infoHistory td.action{color:var(--accent)}
+  #infoHistory .empty{padding:14px;color:var(--muted);text-align:center}
   a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
   a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -440,6 +447,11 @@
       </select>
       <button id="logBtn">Log</button>
     </div>
+    <div class="row" style="margin-bottom:8px;gap:6px">
+      <input type="date" id="logDate" style="flex:1">
+      <input type="time" id="logTime" style="flex:1">
+      <button class="ghost tiny" id="logNowBtn" title="Reset to now">now</button>
+    </div>
     <input type="text" id="logNote" placeholder="optional note (e.g. deep soak, 1 gal each)">
     <hr>
     <div id="recentLog" class="small">No entries yet.</div>
@@ -604,6 +616,11 @@
     <p class="lat" id="infoType"></p>
     <dl class="kv" id="infoKV"></dl>
     <div id="infoNotes" style="font-size:14px;line-height:1.55;margin-top:6px"></div>
+
+    <div class="history-section" id="infoHistorySection" style="margin-top:18px">
+      <div class="small" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:11px;margin-bottom:6px">Log history</div>
+      <div id="infoHistory" class="small"></div>
+    </div>
 
     <div class="photos-section" id="infoPhotosSection" style="margin-top:18px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
@@ -1597,6 +1614,22 @@ function openInfo(id){
   $('#infoKV').innerHTML = rows.map(([k,v])=>`<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('');
   $('#infoNotes').innerHTML = p.notes ? `<em style="color:var(--muted)">Notes:</em> ${escapeHtml(p.notes)}` : '';
 
+  // Log history for this plant, newest first
+  const entries = (state.log||[]).filter(e => e.plantId === p.id)
+    .slice().sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
+  const histEl = $('#infoHistory');
+  if (!entries.length){
+    histEl.innerHTML = '<div class="empty">No log entries yet.</div>';
+  } else {
+    histEl.innerHTML = '<table><thead><tr><th>When</th><th>Action</th><th>Note</th></tr></thead><tbody>'
+      + entries.map(e => `<tr>
+          <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
+          <td class="action">${escapeHtml(e.action || '')}</td>
+          <td>${escapeHtml(e.note || '')}</td>
+        </tr>`).join('')
+      + '</tbody></table>';
+  }
+
   // build search links — pull genus/cultivar out of "type" when possible, else use name
   const q = (p.type || p.name).replace(/\s+/g,' ').trim();
   const cultivar = (p.type||'').match(/'([^']+)'/);
@@ -1892,25 +1925,38 @@ function openEdit(id){
 }
 
 /* ---------- log ---------- */
+function hmNow(d){ d = d || new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+function fmtLogWhen(e){ return e.date + (e.time ? ' ' + e.time : ''); }
+function resetLogDateTime(){
+  const now = new Date();
+  $('#logDate').value = ymd(now);
+  $('#logTime').value = hmNow(now);
+}
+resetLogDateTime();
+$('#logNowBtn').onclick = resetLogDateTime;
 $('#logBtn').onclick = ()=>{
   const pid = $('#logPlant').value;
   const action = $('#logAction').value;
   const note = $('#logNote').value.trim();
-  const date = ymd(today);
+  const date = $('#logDate').value || ymd(new Date());
+  const time = $('#logTime').value || '';
   const targets = pid==='__all__' ? state.plants.map(p=>p.id) : [pid];
   for (const t of targets){
-    state.log.push({id:uid(), plantId:t, action, note, date});
+    state.log.push({id:uid(), plantId:t, action, note, date, time});
   }
   $('#logNote').value = '';
+  resetLogDateTime();
   save(); renderPlants(); renderLog(); buildBrief();
 };
 function renderLog(){
-  const recent = state.log.slice(-10).reverse();
+  // Sort by date+time descending so back-dated entries land in the right place
+  const sorted = (state.log||[]).slice().sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
+  const recent = sorted.slice(0, 10);
   if (!recent.length){ $('#recentLog').innerHTML = '<span class="empty">No entries yet.</span>'; return; }
-  $('#recentLog').innerHTML = '<table><thead><tr><th>Date</th><th>Plant</th><th>Action</th><th>Note</th></tr></thead><tbody>'
+  $('#recentLog').innerHTML = '<table><thead><tr><th>When</th><th>Plant</th><th>Action</th><th>Note</th></tr></thead><tbody>'
     + recent.map(e=>{
       const p = state.plants.find(x=>x.id===e.plantId);
-      return `<tr><td>${e.date}</td><td>${escapeHtml(p?p.name:'?')}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(p?p.name:'?')}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
