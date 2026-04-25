@@ -1216,7 +1216,16 @@ $('#settingsBtn').onclick = ()=>{
   if (p.style.display === 'block') p.style.display = 'none';
   else openSettings();
 };
-$('#syncchip').onclick = openSettings;
+$('#syncchip').onclick = ()=>{
+  // If we're in an error state with a pending retry, tapping the chip retries now.
+  const chip = $('#syncchip');
+  if (chip.textContent.includes('error') && getToken()){
+    if (pushRetryTimer){ clearTimeout(pushRetryTimer); pushRetryTimer = null; }
+    pushNow();
+    return;
+  }
+  openSettings();
+};
 $('#syncchip').style.cursor = 'pointer';
 $('#locchip').onclick = openSettings;
 $('#locchip').style.cursor = 'pointer';
@@ -2807,9 +2816,11 @@ async function pullFromRemote(){
   } finally { syncing = false; }
 }
 
+let pushRetryTimer = null;
 async function pushNow(){
   if (!getToken() || syncing) return;
   syncing = true;
+  if (pushRetryTimer){ clearTimeout(pushRetryTimer); pushRetryTimer = null; }
   try {
     setSyncStatus('pushing…');
     await pushWithRetry(5);
@@ -2817,7 +2828,11 @@ async function pushNow(){
     suspendSync = true; saveLocal(); suspendSync = false;
     setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
   } catch(e){
-    setSyncStatus('error: '+e.message, 'err');
+    // Local data is safe in localStorage. Schedule a background retry so the
+    // sync recovers without the user having to make another change. Click the
+    // chip (or "Push now" in Settings) to retry immediately.
+    setSyncStatus('error · retry pending — tap to retry', 'err');
+    pushRetryTimer = setTimeout(() => { pushRetryTimer = null; pushNow(); }, 30000);
   } finally { syncing = false; }
 }
 
