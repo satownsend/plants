@@ -205,6 +205,7 @@
   .cols-pop label{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--ink);font-size:13px;cursor:pointer}
   .cols-pop label input[type=checkbox]{margin:0}
   #plantTable.hide-qty [data-col="qty"],
+  #plantTable.hide-category [data-col="category"],
   #plantTable.hide-type [data-col="type"],
   #plantTable.hide-location [data-col="location"],
   #plantTable.hide-planted [data-col="planted"],
@@ -483,7 +484,8 @@
         <thead><tr>
           <th data-sort="name" data-col="name">Name</th>
           <th data-sort="qty" data-col="qty">Qty</th>
-          <th data-sort="type" data-col="type">Type</th>
+          <th data-sort="category" data-col="category">Type</th>
+          <th data-sort="type" data-col="type">Latin name</th>
           <th data-sort="location" data-col="location">Location</th>
           <th data-sort="planted" data-col="planted">Planted</th>
           <th data-sort="price" data-col="price">Price</th>
@@ -659,13 +661,15 @@
 </div>
 
 <template id="plantEditTpl">
-  <tr class="edit-row"><td colspan="10">
+  <tr class="edit-row"><td colspan="11">
     <div class="grid3">
       <div>
-        <label class="small">Name</label>
+        <label class="small">Common name</label>
         <input type="text" data-f="name">
-        <label class="small" style="margin-top:6px;display:block">Type / cultivar</label>
-        <input type="text" data-f="type" placeholder="e.g. Japanese maple 'Shindeshojo'">
+        <label class="small" style="margin-top:6px;display:block">Latin name</label>
+        <input type="text" data-f="type" placeholder="e.g. Acer palmatum 'Shin Deshojo'">
+        <label class="small" style="margin-top:6px;display:block">Type</label>
+        <input type="text" data-f="category" placeholder="e.g. Tree, Shrub, Vine">
       </div>
       <div>
         <label class="small">Location</label>
@@ -1456,6 +1460,7 @@ function saveSort(){ localStorage.setItem('yardDashboard.sort', JSON.stringify(s
 const sortFns = {
   name:    (a,b) => (a.name||'').localeCompare(b.name||''),
   qty:     (a,b) => (Number(a.quantity)||1) - (Number(b.quantity)||1),
+  category:(a,b) => (a.category||'').localeCompare(b.category||''),
   type:    (a,b) => (a.type||'').localeCompare(b.type||''),
   location:(a,b) => (a.spot||'').localeCompare(b.spot||''),
   planted: (a,b) => (a.purchased||'9999-99-99').localeCompare(b.purchased||'9999-99-99'),
@@ -1470,8 +1475,8 @@ const sortFns = {
   },
   notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
 };
-const COL_KEYS = ['qty','type','location','planted','price','watered','fed','notes'];
-const COL_LABELS = {qty:'Qty', type:'Type', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
+const COL_KEYS = ['qty','category','type','location','planted','price','watered','fed','notes'];
+const COL_LABELS = {qty:'Qty', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
 const COL_VIS_KEY = 'yardDashboard.colVisibility';
 function loadColVis(){
   try {
@@ -1524,6 +1529,7 @@ function renderPlants(){
     const stage = establishmentStage(p);
     const stagePill = stage ? ` <span class="pill stage-${stage}">${stageLabel[stage]}</span>` : '';
     const cellQty = qty>1?`<strong>${qty}</strong>`:`<span class="meta">${qty}</span>`;
+    const cellCategory = p.category ? escapeHtml(p.category) : '';
     const cellType = p.type ? `<span class="meta">${escapeHtml(p.type)}</span>` : '';
     const cellSpot = p.spot ? escapeHtml(p.spot) : '';
     const cellPlanted = p.purchased ? plantedDuration(p.purchased) : '';
@@ -1536,7 +1542,8 @@ function renderPlants(){
     tr.innerHTML = `
       <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${stagePill}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
       <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
-      <td data-col="type" data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
+      <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
+      <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
       <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
       <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
@@ -1621,6 +1628,7 @@ function openInfo(id){
   $('#infoType').textContent = p.type || '';
   const qty = Number(p.quantity)||1;
   const rows = [
+    ['Type', p.category || '—'],
     ['Location', p.spot || '—'],
     ['Quantity', qty],
     ['Container', (p.container===true||p.container==='true') ? 'Yes' : 'In ground'],
@@ -2336,11 +2344,15 @@ function csvToPlants(rows, existingByName){
   if (!rows.length) return [];
   const headers = rows[0].map(h=>(h||'').trim().toLowerCase());
   const idx = (k) => headers.findIndex(h=>h===k.toLowerCase());
-  const cName=idx('tree'), cDate=idx('date purchased'), cQty=idx('quantity'),
+  // Name column: prefer "common name", fall back to legacy "tree" header
+  let cName = idx('common name');
+  if (cName < 0) cName = idx('tree');
+  const cLatin=idx('latin name'), cType=idx('type'),
+        cDate=idx('date purchased'), cQty=idx('quantity'),
         cPrice=idx('price'), cAge=idx('years old at purchase'), cSpot=idx('planting location'),
         cSp=idx('spring color'), cSu=idx('summer color'), cFa=idx('fall color'),
         cNotes=idx('notes'), cDead=idx('dead');
-  if (cName < 0) throw new Error('Sheet missing required "Tree" column header');
+  if (cName < 0) throw new Error('Sheet missing required "Common Name" (or legacy "Tree") column header');
   const plants = [];
   for (let r=1; r<rows.length; r++){
     const row = rows[r] || [];
@@ -2363,10 +2375,13 @@ function csvToPlants(rows, existingByName){
     const isDead = cDead>=0
       ? /^(true|yes|1|dead|x)$/i.test((row[cDead]||'').trim())
       : !!existing.dead;
+    const latin = cLatin>=0 ? (row[cLatin]||'').trim() : '';
+    const category = cType>=0 ? (row[cType]||'').trim() : '';
     plants.push({
       id: plantSlug(name),
       name,
-      type: existing.type || '',
+      type: latin || existing.type || '',
+      category: category || existing.category || '',
       spot,
       container: isContainer || !!existing.container,
       tags: existing.tags || '',
