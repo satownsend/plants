@@ -220,6 +220,15 @@
   #infoHistory td.when{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
   #infoHistory td.action{color:var(--accent)}
   #infoHistory .empty{padding:14px;color:var(--muted);text-align:center}
+  #frostLog{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  #frostLog table{width:100%;border-collapse:collapse;font-size:13px}
+  #frostLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  #frostLog td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+  #frostLog td.when{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
+  #frostLog td.action{white-space:nowrap}
+  #frostLog .pill-frost{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(126,196,204,.15);color:var(--cool);border:1px solid rgba(126,196,204,.3)}
+  #frostLog .pill-damage{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(224,138,74,.15);color:var(--warn);border:1px solid rgba(224,138,74,.3)}
+  #frostLog .empty{padding:18px;color:var(--muted);text-align:center}
   a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
   a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -443,6 +452,8 @@
         <option value="repotted">repotted</option>
         <option value="covered">covered</option>
         <option value="uncovered">uncovered</option>
+        <option value="frost">frost</option>
+        <option value="frost damage">frost damage</option>
         <option value="note">note</option>
       </select>
       <button id="logBtn">Log</button>
@@ -488,6 +499,11 @@
       <button id="addPlantBtn" class="ghost">+ Add plant</button>
       <span class="right small" id="plantCount"></span>
     </div>
+  </div>
+
+  <div class="panel full" id="frostPanel">
+    <h2>Frost log <span class="small" id="frostCount" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)"></span></h2>
+    <div id="frostLog" class="small"></div>
   </div>
 
   <div class="panel full" id="statsPanel">
@@ -1539,8 +1555,11 @@ function renderPlants(){
 
   // refresh log dropdown — only living plants
   const sel = $('#logPlant');
+  const prevValue = sel.value;
   sel.innerHTML = state.plants.filter(p=>!p.dead).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
-    + '<option value="__all__">— all living plants —</option>';
+    + '<option value="__all__">— all living plants —</option>'
+    + '<option value="__yard__">— yard-wide event —</option>';
+  if (prevValue) sel.value = prevValue;
 }
 $('#showDead').addEventListener('change', renderPlants);
 
@@ -1940,7 +1959,10 @@ $('#logBtn').onclick = ()=>{
   const note = $('#logNote').value.trim();
   const date = $('#logDate').value || ymd(new Date());
   const time = $('#logTime').value || '';
-  const targets = pid==='__all__' ? state.plants.map(p=>p.id) : [pid];
+  let targets;
+  if (pid === '__all__') targets = state.plants.map(p=>p.id);
+  else if (pid === '__yard__') targets = [''];   // single yard-wide entry, plantId stays empty
+  else targets = [pid];
   for (const t of targets){
     state.log.push({id:uid(), plantId:t, action, note, date, time});
   }
@@ -1956,7 +1978,8 @@ function renderLog(){
   $('#recentLog').innerHTML = '<table><thead><tr><th>When</th><th>Plant</th><th>Action</th><th>Note</th></tr></thead><tbody>'
     + recent.map(e=>{
       const p = state.plants.find(x=>x.id===e.plantId);
-      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(p?p.name:'?')}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+      const who = p ? p.name : (e.plantId === '' ? 'Yard' : '?');
+      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td><span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
@@ -2748,7 +2771,38 @@ function renderStats(){
     'No prices recorded in notes.', 'var(--accent2)');
 }
 
-function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); }
+function renderFrostLog(){
+  const el = $('#frostLog'); if (!el) return;
+  const entries = (state.log||[])
+    .filter(e => e.action === 'frost' || e.action === 'frost damage')
+    .slice()
+    .sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
+  const countEl = $('#frostCount');
+  if (countEl){
+    const frost = entries.filter(e => e.action === 'frost').length;
+    const dmg = entries.filter(e => e.action === 'frost damage').length;
+    countEl.textContent = entries.length ? ` · ${frost} event${frost===1?'':'s'}, ${dmg} damage report${dmg===1?'':'s'}` : '';
+  }
+  if (!entries.length){
+    el.innerHTML = '<div class="empty">No frost events logged yet. Use Quick log → "frost" or "frost damage" to add one.</div>';
+    return;
+  }
+  el.innerHTML = '<table><thead><tr><th>When</th><th>Type</th><th>Plant</th><th>Note</th></tr></thead><tbody>'
+    + entries.map(e => {
+      const p = state.plants.find(x => x.id === e.plantId);
+      const pillCls = e.action === 'frost damage' ? 'pill-damage' : 'pill-frost';
+      const who = p ? p.name : (e.plantId === '' ? '<em style="color:var(--muted)">Yard</em>' : '—');
+      return `<tr>
+        <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
+        <td class="action"><span class="${pillCls}">${escapeHtml(e.action)}</span></td>
+        <td>${who === '—' ? '—' : (p ? escapeHtml(p.name) : who)}</td>
+        <td>${escapeHtml(e.note || '')}</td>
+      </tr>`;
+    }).join('')
+    + '</tbody></table>';
+}
+
+function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); renderFrostLog(); }
 render();
 fetchForecast();
 refreshTokenInput();
