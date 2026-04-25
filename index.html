@@ -65,6 +65,23 @@
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media (max-width:900px){.grid{grid-template-columns:1fr}}
   .stats-row{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:24px;align-items:start}
+  .gallery{margin-bottom:16px;border-radius:14px;overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line);background:#000}
+  .gallery-stage{position:relative;width:100%;aspect-ratio:21/9;background:#0a0a0a}
+  @media (max-width:700px){.gallery-stage{aspect-ratio:4/3}}
+  .gallery-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .9s ease;cursor:pointer}
+  .gallery-img.is-current{opacity:1}
+  .gallery-caption{position:absolute;left:0;right:0;bottom:0;padding:14px 16px 12px;color:#fff;font-size:13px;
+    background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+  .gallery-caption .gname{font-weight:600;font-size:15px;display:block;letter-spacing:-.01em}
+  .gallery-caption .gmeta{opacity:.85;font-size:12px}
+  .gallery-dots{position:absolute;top:10px;right:12px;display:flex;gap:4px;background:rgba(0,0,0,.45);padding:5px 9px;border-radius:999px;color:#fff;font-size:11px;font-variant-numeric:tabular-nums}
+  .gallery-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.15);
+    color:#fff;width:36px;height:36px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;opacity:0;transition:opacity .2s;
+    display:flex;align-items:center;justify-content:center;padding:0}
+  .gallery-nav.prev{left:10px}
+  .gallery-nav.next{right:10px}
+  .gallery-stage:hover .gallery-nav{opacity:1}
+  @media (hover:none){.gallery-nav{opacity:.7}}
   .stats-legend{display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:200px;overflow-y:auto}
   .stats-legend .lr{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center}
   .stats-legend .dot{width:10px;height:10px;border-radius:2px}
@@ -329,10 +346,22 @@
     <span class="chip" id="locchip">📍 set location</span>
     <span class="chip" id="frostchip">❄ frost dates</span>
     <span class="chip" id="syncchip" title="Click to configure">⟳ sync: off</span>
+    <span class="chip" id="gallerychip" title="Toggle photo gallery" style="cursor:pointer">🖼 gallery</span>
     <span class="chip" id="themechip" title="Toggle theme" style="cursor:pointer">◐ light</span>
     <button class="ghost tiny" id="settingsBtn">Settings</button>
   </div>
 </header>
+
+<div class="gallery" id="galleryPanel" style="display:none">
+  <div class="gallery-stage" id="galleryStage">
+    <img class="gallery-img is-current" id="galleryImgA" alt="">
+    <img class="gallery-img" id="galleryImgB" alt="">
+    <div class="gallery-caption" id="galleryCaption"></div>
+    <div class="gallery-dots" id="galleryDots"></div>
+    <button class="gallery-nav prev" id="galleryPrev" aria-label="Previous">‹</button>
+    <button class="gallery-nav next" id="galleryNext" aria-label="Next">›</button>
+  </div>
+</div>
 
 <div class="panel full" id="briefPanel">
   <h2>Today's brief</h2>
@@ -772,6 +801,107 @@ $('#themechip').onclick = ()=>{
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
 };
+
+/* ---------- photo gallery ---------- */
+const GALLERY_KEY = 'yardDashboard.galleryOn';
+const galleryState = { pool: [], idx: 0, current: 'A', timer: null, paused: false };
+
+function isGalleryOn(){
+  const v = localStorage.getItem(GALLERY_KEY);
+  return v === null ? true : v === '1';  // default on
+}
+function setGalleryOn(on){
+  localStorage.setItem(GALLERY_KEY, on ? '1' : '0');
+  applyGalleryToggle();
+}
+function applyGalleryToggle(){
+  const on = isGalleryOn();
+  const panel = $('#galleryPanel');
+  const chip = $('#gallerychip');
+  if (chip) chip.textContent = on ? '🖼 gallery on' : '🖼 gallery off';
+  if (!panel) return;
+  if (on && galleryState.pool.length){
+    panel.style.display = '';
+    startGallery();
+  } else {
+    panel.style.display = 'none';
+    stopGallery();
+  }
+}
+function buildGalleryPool(){
+  const items = [];
+  for (const p of (state.plants||[])){
+    for (const ph of (p.photos||[])){
+      if (!ph || !ph.key) continue;
+      items.push({ plantId: p.id, plantName: p.name, key: ph.key, date: ph.date || '', caption: ph.caption || '' });
+    }
+  }
+  // Fisher-Yates shuffle
+  for (let i = items.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  galleryState.pool = items;
+  galleryState.idx = 0;
+}
+function showGalleryPhoto(item){
+  if (!item) return;
+  const a = $('#galleryImgA'), b = $('#galleryImgB');
+  const incoming = galleryState.current === 'A' ? b : a;
+  const outgoing = galleryState.current === 'A' ? a : b;
+  // Preload before swapping so we never show a half-loaded image
+  incoming.onload = () => {
+    incoming.classList.add('is-current');
+    outgoing.classList.remove('is-current');
+    galleryState.current = galleryState.current === 'A' ? 'B' : 'A';
+  };
+  incoming.dataset.plantId = item.plantId;
+  incoming.dataset.key = item.key;
+  incoming.src = r2PublicUrl(item.key);
+  const cap = $('#galleryCaption');
+  cap.innerHTML = `<span class="gname">${escapeHtml(item.plantName)}</span><span class="gmeta">${escapeHtml(item.date || '')}${item.caption ? ' · ' + escapeHtml(item.caption) : ''}</span>`;
+  $('#galleryDots').textContent = `${galleryState.idx + 1} / ${galleryState.pool.length}`;
+}
+function advanceGallery(step = 1){
+  if (!galleryState.pool.length) return;
+  galleryState.idx = (galleryState.idx + step + galleryState.pool.length) % galleryState.pool.length;
+  showGalleryPhoto(galleryState.pool[galleryState.idx]);
+}
+function startGallery(){
+  if (!galleryState.pool.length) return;
+  if (galleryState.timer) return;  // already running
+  showGalleryPhoto(galleryState.pool[galleryState.idx]);
+  galleryState.timer = setInterval(() => { if (!galleryState.paused) advanceGallery(1); }, 5000);
+}
+function stopGallery(){
+  if (galleryState.timer){ clearInterval(galleryState.timer); galleryState.timer = null; }
+}
+function refreshGallery(){
+  // Only rebuild + restart if the underlying photo set changed.
+  const keys = [];
+  for (const p of (state.plants||[])) for (const ph of (p.photos||[])) if (ph && ph.key) keys.push(ph.key);
+  const sig = keys.sort().join('|');
+  if (sig === galleryState.sig){ applyGalleryToggle(); return; }
+  galleryState.sig = sig;
+  buildGalleryPool();
+  applyGalleryToggle();
+}
+$('#gallerychip').onclick = () => setGalleryOn(!isGalleryOn());
+$('#galleryPrev').onclick = (e) => { e.stopPropagation(); advanceGallery(-1); };
+$('#galleryNext').onclick = (e) => { e.stopPropagation(); advanceGallery(1); };
+$('#galleryStage').addEventListener('mouseenter', () => { galleryState.paused = true; });
+$('#galleryStage').addEventListener('mouseleave', () => { galleryState.paused = false; });
+[$('#galleryImgA'), $('#galleryImgB')].forEach(img => {
+  img.addEventListener('click', () => {
+    const plant = (state.plants||[]).find(p => p.id === img.dataset.plantId);
+    if (!plant) return;
+    const photos = (plant.photos||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const idx = photos.findIndex(ph => ph.key === img.dataset.key);
+    if (idx >= 0) openLightbox(photos, idx);
+  });
+});
+// Pause auto-rotate when the tab is hidden
+document.addEventListener('visibilitychange', () => { galleryState.paused = document.hidden; });
 
 /* ---------- header ---------- */
 $('#dateline').textContent = fmtDate(today);
@@ -2277,7 +2407,7 @@ function renderStats(){
     'No prices recorded in notes.', 'var(--accent2)');
 }
 
-function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); }
+function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); }
 render();
 fetchForecast();
 refreshTokenInput();
