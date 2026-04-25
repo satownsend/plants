@@ -2713,8 +2713,12 @@ function syncBlob(){
 
 async function ghFetch(){
   const t = getToken(); if (!t) throw new Error('no token');
-  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}?ref=${GH.branch}`;
-  const r = await fetch(url, {headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json'}});
+  // Cache-bust the URL — defends against browser/CDN intermediaries returning stale data.
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}?ref=${GH.branch}&_=${Date.now()}`;
+  const r = await fetch(url, {
+    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json', 'Cache-Control':'no-cache'},
+    cache: 'no-store',
+  });
   if (r.status === 404) return {sha:null, data:null};
   if (!r.ok) throw new Error(`fetch ${r.status}`);
   const j = await r.json();
@@ -2756,10 +2760,18 @@ async function pullFromRemote(){
     setSyncStatus('pulling…');
     const remote = await ghFetch();
     if (remote && remote.data){
-      // Merge: remote is authoritative for plant fields; log + photos are unioned
+      // Merge log: union by id, preferring local for matching ids so user edits
+      // (which keep the same id but mutate fields) don't get clobbered by the
+      // older remote copy on auto-pull.
+      const localLogById = new Map((state.log||[]).map(e => [e.id, e]));
       const remoteIds = new Set((remote.data.log||[]).map(e=>e.id));
       const localOnly = (state.log||[]).filter(e=>e.id && !remoteIds.has(e.id));
-      const hadLocalPending = localOnly.length > 0;
+      // hadLocalPending: any local-only entries (new) OR any local edits that differ from remote.
+      const hadLocalEdits = (remote.data.log||[]).some(re => {
+        const le = localLogById.get(re.id);
+        return le && JSON.stringify(le) !== JSON.stringify(re);
+      });
+      const hadLocalPending = localOnly.length > 0 || hadLocalEdits;
       // Photo-preserving plant merge: take remote plant fields, but union photos by key
       // so unpushed local photo additions survive a pull.
       const localById = new Map((state.plants||[]).map(p=>[p.id, p]));
@@ -2777,7 +2789,10 @@ async function pullFromRemote(){
       const remoteIdSet = new Set((remote.data.plants||[]).map(p=>p.id));
       const localOnlyPlants = (state.plants||[]).filter(p => !remoteIdSet.has(p.id));
       state.plants = remote.data.plants ? [...mergedPlants, ...localOnlyPlants] : state.plants;
-      state.log = [...(remote.data.log||[]), ...localOnly];
+      // Build merged log: for each remote entry, prefer the local copy if it exists
+      // (this preserves edits to existing entries). Then append local-only new entries.
+      const mergedRemoteLog = (remote.data.log||[]).map(re => localLogById.get(re.id) || re);
+      state.log = [...mergedRemoteLog, ...localOnly];
       const hadLocalPhotoPending = localPhotoPending.length > 0;
       const remoteSettings = remote.data.settings || {};
       state.settings = {...state.settings, ...remoteSettings};
@@ -2836,10 +2851,28 @@ async function pushNow(){
   } finally { syncing = false; }
 }
 
-async function pushWithRetry(triesLeft){
-  // Refetch current remote, merge log, then PUT with the fresh sha.
-  // On 409 (conflict), retry once with another fresh sha.
-  const remote = await ghFetch();   // throws on real errors; returns {sha:null,data:null} on 404
+async function pushWithRetry(triesLeft, useOptimistic = true){
+  // Optimistic path: PUT with our cached lastSha (the sha returned by our last
+  // successful PUT). GitHub Contents API can briefly return stale SHAs after a
+  // write, so an immediate refetch can yield an outdated sha and trigger a 409
+  // even when nobody else is writing. Using lastSha bypasses the read-side cache.
+  if (useOptimistic && lastSha){
+    const blob = syncBlob();
+    try {
+      const newSha = await ghPut(blob, lastSha);
+      lastSha = newSha;
+      return;
+    } catch(e){
+      if (/\b409\b/.test(e.message) || /\b422\b/.test(e.message)){
+        // Sha actually drifted (real concurrent writer, or first run with a
+        // wrong cached sha) — fall through to the pessimistic merge path.
+      } else {
+        throw e;
+      }
+    }
+  }
+  // Pessimistic path: refetch sha, merge log, PUT.
+  const remote = await ghFetch();
   let mergedLog = state.log;
   if (remote && remote.data && remote.data.log){
     const localIds = new Set((state.log||[]).map(e=>e.id));
@@ -2853,10 +2886,10 @@ async function pushWithRetry(triesLeft){
     lastSha = newSha;
   } catch(e){
     if (/\b409\b/.test(e.message) && triesLeft > 1){
-      // Conflict — someone else wrote in the meantime. Backoff briefly, refetch, retry.
-      const backoffMs = 250 * (6 - triesLeft);  // 250, 500, 750, 1000ms
+      // Backoff, then retry pessimistic path (don't try optimistic — sha is known stale).
+      const backoffMs = 250 * (6 - triesLeft);
       await new Promise(r => setTimeout(r, backoffMs));
-      return pushWithRetry(triesLeft - 1);
+      return pushWithRetry(triesLeft - 1, false);
     }
     throw e;
   }
