@@ -83,16 +83,39 @@
     background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;width:100%;color:var(--ink)}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-deep);background:#152821}
   textarea{min-height:60px;resize:vertical}
-  table{width:100%;border-collapse:collapse}
-  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{font:600 12px/1.2 "SF Pro Display",sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{position:sticky;top:0;background:var(--panel);z-index:2;
+    font:600 11px/1.2 "SF Pro Display",sans-serif;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    padding-top:13px;padding-bottom:11px;border-bottom:1px solid var(--line2);box-shadow:0 1px 0 var(--line)}
   th[data-sort]{cursor:pointer;user-select:none}
   th[data-sort]:hover{color:var(--accent)}
   th[data-sort].sort-active{color:var(--accent)}
   th[data-sort].sort-active::after{content:" ▲";font-size:9px;letter-spacing:0}
   th[data-sort].sort-active.sort-desc::after{content:" ▼"}
   td .meta{color:var(--muted);font-size:12px}
-  tr:hover td{background:rgba(143,192,106,.04)}
+  /* Zebra rows + sticky first column */
+  tbody tr:nth-child(odd) td{background:var(--panel)}
+  tbody tr:nth-child(even) td{background:var(--bg2)}
+  tbody td:first-child, thead th:first-child{position:sticky;left:0;z-index:1}
+  thead th:first-child{z-index:3}
+  tbody tr td:first-child{font-weight:600}
+  tbody tr td:first-child a.namelink{color:var(--ink);font-weight:700;font-size:14px;border-bottom:none}
+  tbody tr td:first-child a.namelink:hover{color:var(--accent)}
+  /* Hover overrides zebra */
+  tbody tr:hover td{background:rgba(143,192,106,.10)}
+  [data-theme="light"] tbody tr:hover td{background:rgba(61,107,34,.08)}
+  /* Edit row uses panel bg, no zebra */
+  tbody tr.edit-row td, tbody tr.edit-row td:first-child{background:var(--panel2);font-weight:400}
+  /* Make table panel wrap horizontal-scroll-aware so sticky kicks in when narrow */
+  .table-scroll{overflow-x:auto;max-width:100%;margin:0 -4px}
+  .table-scroll table{min-width:760px}
+  /* Mobile: don't bother with sticky / scroll, cards layout takes over */
+  @media (max-width:700px){
+    .table-scroll{overflow-x:visible;margin:0}
+    .table-scroll table{min-width:0}
+    tbody td:first-child, thead th:first-child{position:static}
+  }
   .tasks li{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel2);list-style:none}
   .tasks ul{padding:0;margin:0}
   .tasks .why{color:var(--muted);font-size:12px;margin-top:2px}
@@ -130,6 +153,12 @@
   .pill.frost{background:#15282b;color:var(--cool);border-color:#2c4a4d}
   .pill.tender{background:#3a2418;color:#e8a06a;border-color:#5a3a23}
   .pill.rip{background:#0a0d0b;color:#9a948a;border-color:#333}
+  .pill.stage-establishment{background:#1f3a25;color:#a3d07c;border-color:#3d6b2f}
+  .pill.stage-establishing{background:#3a3018;color:#d4b568;border-color:#5a4a23}
+  .pill.stage-established{background:transparent;color:var(--muted);border-color:var(--line2)}
+  [data-theme="light"] .pill.stage-establishment{background:#dde9d4;color:#2c5520;border-color:#9bbf85}
+  [data-theme="light"] .pill.stage-establishing{background:#f0e6c2;color:#7a5a17;border-color:#d4ad7a}
+  [data-theme="light"] .pill.stage-established{background:transparent;color:var(--muted);border-color:var(--line2)}
   tr.dead td{color:#6b6f63;text-decoration:line-through;text-decoration-color:#444}
   tr.dead td a.namelink{color:#6b6f63}
   tr.dead td button,tr.dead td .pill{text-decoration:none}
@@ -329,20 +358,22 @@
       <label><input type="checkbox" id="showDead"> Show departed (RIP)</label>
       <span class="right small" id="plantStats"></span>
     </div>
-    <table id="plantTable">
-      <thead><tr>
-        <th data-sort="name">Name</th>
-        <th data-sort="qty">Qty</th>
-        <th data-sort="type">Type</th>
-        <th data-sort="location">Location</th>
-        <th data-sort="planted">Planted</th>
-        <th data-sort="watered">Last watered</th>
-        <th data-sort="fed">Last fed</th>
-        <th data-sort="notes">Notes</th>
-        <th></th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="plantTable">
+        <thead><tr>
+          <th data-sort="name">Name</th>
+          <th data-sort="qty">Qty</th>
+          <th data-sort="type">Type</th>
+          <th data-sort="location">Location</th>
+          <th data-sort="planted">Planted</th>
+          <th data-sort="watered">Last watered</th>
+          <th data-sort="fed">Last fed</th>
+          <th data-sort="notes">Notes</th>
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
     <div class="row" style="margin-top:10px">
       <button id="addPlantBtn" class="ghost">+ Add plant</button>
       <span class="right small" id="plantCount"></span>
@@ -596,6 +627,22 @@ function daysSince(dateStr){
   const d = parseYMD(dateStr);
   return daysBetween(d, today);
 }
+function establishmentStage(p){
+  if (!p || !p.purchased) return null;
+  const planted = parseYMD(p.purchased);
+  if (!planted || isNaN(planted)) return null;
+  const days = daysBetween(planted, today);
+  if (days < 0) return null;        // future planting
+  if (days < 365) return 'establishment';
+  if (days < 365 * 3) return 'establishing';
+  return 'established';
+}
+const stageLabel = {
+  establishment: 'Establishment year',
+  establishing:  'Still establishing',
+  established:   'Established',
+};
+
 function plantedDuration(dateStr){
   if (!dateStr) return '';
   const d = parseYMD(dateStr);
@@ -765,7 +812,6 @@ function dayAlerts(d, units){
   const frostT = units==='C' ? 2 : 36;
   const heatT  = units==='C' ? 31 : 88;
   const windT  = 25;
-  const heavyRain = units==='C' ? 12 : 0.5;
   const alerts = [];
   if (d.lo <= frostT){
     alerts.push({label:'Frost risk',
@@ -778,10 +824,6 @@ function dayAlerts(d, units){
   if (d.wind >= windT){
     alerts.push({label:'High wind',
       detail:`Gusts up to ${Math.round(d.wind)} mph. Move hanging pots (Asayake, Rikuzen Shidare) to a sheltered spot. Check stake ties on young trees.`});
-  }
-  if (d.pcp >= heavyRain){
-    alerts.push({label:'Heavy rain',
-      detail:`${Number(d.pcp).toFixed(2)} ${pu} expected. Skip watering. After: check mulch washouts, stake ties, and standing water near roots.`});
   }
   return alerts;
 }
@@ -882,14 +924,24 @@ function buildBrief(){
     const last = lastLogFor(p.id, 'watered');
     const since = last ? daysSince(last.date) : 999;
     const isContainer = p.container===true || p.container==='true';
-    const threshold = isContainer ? 2 : 5;
-    if (since >= threshold && (isContainer || dryStretch)){
-      waterTargets.push({name:p.name, since, container:isContainer});
+    const stage = establishmentStage(p);
+    // First-year trees need consistent moisture even in-ground; tighter than established
+    let threshold;
+    if (stage === 'establishment') threshold = isContainer ? 2 : 3;
+    else if (stage === 'establishing') threshold = isContainer ? 2 : 4;
+    else threshold = isContainer ? 2 : 5;
+    // Establishment-year plants: water reminder regardless of dryStretch
+    const force = stage === 'establishment';
+    if (since >= threshold && (force || isContainer || dryStretch)){
+      waterTargets.push({name:p.name, since, container:isContainer, stage});
     }
   }
   if (waterTargets.length){
     waterTargets.sort((a,b)=>b.since-a.since);
-    const top = waterTargets.slice(0,6).map(t=>`${t.name}${t.container?' (pot)':''} — ${t.since>=999?'never logged':t.since+'d'}`);
+    const top = waterTargets.slice(0,6).map(t=>{
+      const tag = t.stage === 'establishment' ? ' (1st yr)' : (t.container ? ' (pot)' : '');
+      return `${t.name}${tag} — ${t.since>=999?'never logged':t.since+'d'}`;
+    });
     tasks.push({
       tag:'water',
       title:`Water: ${waterTargets.length} plant${waterTargets.length>1?'s':''} due`,
@@ -923,6 +975,16 @@ function buildBrief(){
     if (dToFirst > 0 && dToFirst <= 30){
       tasks.push({tag:'protect',title:`First fall frost ~${dToFirst} days away`, why:'Stop fertilizing woody plants; plan to bring tender containers in.'});
     }
+  }
+
+  // First-year plantings: dedicated inspection reminder
+  const firstYear = livePlants.filter(p=>establishmentStage(p) === 'establishment');
+  if (firstYear.length){
+    tasks.push({
+      tag:'inspect',
+      title:`Establishment year: ${firstYear.length} young tree${firstYear.length>1?'s':''} need extra care`,
+      why: `Keep moisture even (no drought stress); skip fertilizer until next year; watch for transplant shock and pest damage. ${firstYear.slice(0,5).map(p=>p.name).join(', ')}${firstYear.length>5?` +${firstYear.length-5} more`:''}`
+    });
   }
 
   // Plants with no recent inspection
@@ -1002,6 +1064,8 @@ function renderPlants(){
     const tagBadges = (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
       .map(t=>`<span class="pill ${/tender|frost/i.test(t)?'tender':''}">${escapeHtml(t)}</span>`).join('');
     const qty = Number(p.quantity)||1;
+    const stage = establishmentStage(p);
+    const stagePill = stage ? ` <span class="pill stage-${stage}">${stageLabel[stage]}</span>` : '';
     const cellQty = qty>1?`<strong>${qty}</strong>`:`<span class="meta">${qty}</span>`;
     const cellType = p.type ? `<span class="meta">${escapeHtml(p.type)}</span>` : '';
     const cellSpot = p.spot ? escapeHtml(p.spot) : '';
@@ -1011,7 +1075,7 @@ function renderPlants(){
     const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
-      <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
+      <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${stagePill}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
       <td data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
@@ -1067,6 +1131,7 @@ function openInfo(id){
     ['Tags', p.tags || '—'],
     ['Purchased', p.purchased || '—'],
     ['Planted for', p.purchased ? plantedDuration(p.purchased) : '—'],
+    ['Stage', (function(){ const s = establishmentStage(p); return s ? stageLabel[s] : '—'; })()],
     ['Status', p.dead ? 'Departed (RIP)' : 'Living'],
   ];
   $('#infoKV').innerHTML = rows.map(([k,v])=>`<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('');
