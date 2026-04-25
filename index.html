@@ -28,6 +28,25 @@
     --chip-line:#2c4438;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
   }
+  [data-theme="light"]{
+    --bg:#f3eddc;
+    --bg2:#faf6ec;
+    --panel:#ffffff;
+    --panel2:#f5f0e0;
+    --ink:#26291f;
+    --ink-soft:#42463a;
+    --muted:#73776a;
+    --line:#d8cfba;
+    --line2:#c0b89f;
+    --accent:#3d6b22;
+    --accent-deep:#2a4f15;
+    --accent2:#a86528;
+    --warn:#9c4a18;
+    --cool:#3a6e7a;
+    --chip:#e9e3d2;
+    --chip-line:#d3cab3;
+    --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 22px rgba(0,0,0,.08);
+  }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;
     background:
@@ -67,6 +86,11 @@
   table{width:100%;border-collapse:collapse}
   th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   th{font:600 12px/1.2 "SF Pro Display",sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  th[data-sort]{cursor:pointer;user-select:none}
+  th[data-sort]:hover{color:var(--accent)}
+  th[data-sort].sort-active{color:var(--accent)}
+  th[data-sort].sort-active::after{content:" ▲";font-size:9px;letter-spacing:0}
+  th[data-sort].sort-active.sort-desc::after{content:" ▼"}
   td .meta{color:var(--muted);font-size:12px}
   tr:hover td{background:rgba(143,192,106,.04)}
   .tasks li{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel2);list-style:none}
@@ -197,6 +221,37 @@
     .forecast{grid-template-columns:repeat(2,1fr)}
     h1{font-size:18px}
   }
+  /* Light-mode overrides for elements with non-variable colors */
+  [data-theme="light"] body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #e7dfc6 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, #ece5d0 0%, transparent 55%),
+      var(--bg);
+  }
+  [data-theme="light"] button{color:#fff}
+  [data-theme="light"] button:hover{background:var(--accent-deep)}
+  [data-theme="light"] tr.dead td{color:#a09a8a;text-decoration-color:#bbb}
+  [data-theme="light"] tr.dead td a.namelink{color:#a09a8a}
+  [data-theme="light"] .pill.rip{background:#f5efde;color:#7a7466;border-color:#c7bfa6}
+  [data-theme="light"] .forecast .day.frost{background:#dde9ed;border-color:#a8c2cc}
+  [data-theme="light"] .forecast .day.frost .hi,
+  [data-theme="light"] .forecast .day.frost .lo{color:#2c5660}
+  [data-theme="light"] .forecast .day.warm{background:#f3e3cc;border-color:#d4ad7a}
+  [data-theme="light"] .forecast .day.warm .hi{color:#9c4a18}
+  [data-theme="light"] .chip.warn{background:#f5e0c8;border-color:#d4ad7a;color:#9c4a18}
+  [data-theme="light"] .chip.cool{background:#dde9ed;border-color:#a8c2cc;color:#2c5660}
+  [data-theme="light"] .chip.ok{background:#dde9d4;border-color:#a8c298;color:#3d6b22}
+  [data-theme="light"] .pill.frost{background:#dde9ed;color:#2c5660;border-color:#a8c2cc}
+  [data-theme="light"] .pill.tender{background:#f5e0c8;color:#9c4a18;border-color:#d4ad7a}
+  [data-theme="light"] .tasks .tag{background:#e9e3d2;color:#42463a}
+  [data-theme="light"] .tasks .tag.water{background:#dde9ed;color:#2c5660}
+  [data-theme="light"] .tasks .tag.protect{background:#f5e0c8;color:#9c4a18}
+  [data-theme="light"] .tasks .tag.feed{background:#f0e6c2;color:#7a5a17}
+  [data-theme="light"] .tasks .tag.prune{background:#e7dff0;color:#5a3d8a}
+  [data-theme="light"] .tasks .tag.inspect{background:#dde9d4;color:#3d6b22}
+  [data-theme="light"] .tasks .tag.move{background:#f0d8d8;color:#8a3d3d}
+  [data-theme="light"] tr:hover td{background:rgba(61,107,34,.05)}
+  [data-theme="light"] .modal-back{background:rgba(80,70,50,.45)}
   /* iOS safe area */
   @supports (padding:max(0px)){
     .wrap{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
@@ -215,6 +270,7 @@
     <span class="chip" id="locchip">📍 set location</span>
     <span class="chip" id="frostchip">❄ frost dates</span>
     <span class="chip" id="syncchip" title="Click to configure">⟳ sync: off</span>
+    <span class="chip" id="themechip" title="Toggle theme" style="cursor:pointer">◐ light</span>
     <button class="ghost tiny" id="settingsBtn">Settings</button>
   </div>
 </header>
@@ -264,7 +320,15 @@
     </div>
     <table id="plantTable">
       <thead><tr>
-        <th>Name</th><th>Qty</th><th>Type</th><th>Spot</th><th>Planted</th><th>Last watered</th><th>Last fed</th><th>Notes</th><th></th>
+        <th data-sort="name">Name</th>
+        <th data-sort="qty">Qty</th>
+        <th data-sort="type">Type</th>
+        <th data-sort="location">Location</th>
+        <th data-sort="planted">Planted</th>
+        <th data-sort="watered">Last watered</th>
+        <th data-sort="fed">Last fed</th>
+        <th data-sort="notes">Notes</th>
+        <th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -528,6 +592,23 @@ function plantedDuration(dateStr){
   const rem = months - years*12;
   return rem ? `${years}y ${rem}mo` : `${years}y`;
 }
+
+/* ---------- theme ---------- */
+const THEME_KEY = 'yardDashboard.theme';
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#f3eddc' : '#0d1611');
+  const chip = $('#themechip');
+  if (chip) chip.textContent = t === 'light' ? '◐ dark' : '◐ light';
+}
+applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+$('#themechip').onclick = ()=>{
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = cur === 'light' ? 'dark' : 'light';
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+};
 
 /* ---------- header ---------- */
 $('#dateline').textContent = fmtDate(today);
@@ -819,11 +900,44 @@ function prettyDate(s){
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 /* ---------- plants table ---------- */
+let sortState = JSON.parse(localStorage.getItem('yardDashboard.sort') || '{"col":"name","dir":"asc"}');
+function saveSort(){ localStorage.setItem('yardDashboard.sort', JSON.stringify(sortState)); }
+
+const sortFns = {
+  name:    (a,b) => (a.name||'').localeCompare(b.name||''),
+  qty:     (a,b) => (Number(a.quantity)||1) - (Number(b.quantity)||1),
+  type:    (a,b) => (a.type||'').localeCompare(b.type||''),
+  location:(a,b) => (a.spot||'').localeCompare(b.spot||''),
+  planted: (a,b) => (a.purchased||'9999-99-99').localeCompare(b.purchased||'9999-99-99'),
+  watered: (a,b) => {
+    const la = lastLogFor(a.id,'watered'), lb = lastLogFor(b.id,'watered');
+    return (la?la.date:'0').localeCompare(lb?lb.date:'0');
+  },
+  fed: (a,b) => {
+    const la = lastLogFor(a.id,'fertilized'), lb = lastLogFor(b.id,'fertilized');
+    return (la?la.date:'0').localeCompare(lb?lb.date:'0');
+  },
+  notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
+};
+function applySortIndicator(){
+  $$('#plantTable th[data-sort]').forEach(th=>{
+    th.classList.remove('sort-active','sort-desc');
+    if (th.dataset.sort === sortState.col){
+      th.classList.add('sort-active');
+      if (sortState.dir === 'desc') th.classList.add('sort-desc');
+    }
+  });
+}
+
 function renderPlants(){
   const tb = $('#plantTable tbody');
   tb.innerHTML = '';
   const showDead = $('#showDead').checked;
-  const visible = state.plants.filter(p=> showDead || !p.dead);
+  let visible = state.plants.filter(p=> showDead || !p.dead);
+  const cmp = sortFns[sortState.col] || sortFns.name;
+  visible.sort(cmp);
+  if (sortState.dir === 'desc') visible.reverse();
+  applySortIndicator();
   for (const p of visible){
     const lastW = lastLogFor(p.id,'watered');
     const lastF = lastLogFor(p.id,'fertilized');
@@ -845,7 +959,7 @@ function renderPlants(){
       <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${(p.container===true||p.container==='true')?' <span class="pill">pot</span>':''}${tagBadges}</td>
       <td data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-label="Type" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
-      <td data-label="Spot" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
+      <td data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
       <td data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
       <td data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
       <td data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
@@ -865,6 +979,19 @@ function renderPlants(){
     + '<option value="__all__">— all living plants —</option>';
 }
 $('#showDead').addEventListener('change', renderPlants);
+$$('#plantTable th[data-sort]').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const col = th.dataset.sort;
+    if (sortState.col === col){
+      sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortState.col = col;
+      sortState.dir = 'asc';
+    }
+    saveSort();
+    renderPlants();
+  });
+});
 
 $('#plantTable').addEventListener('click', e=>{
   const btn = e.target.closest('button[data-edit]');
@@ -879,7 +1006,7 @@ function openInfo(id){
   $('#infoType').textContent = p.type || '';
   const qty = Number(p.quantity)||1;
   const rows = [
-    ['Spot', p.spot || '—'],
+    ['Location', p.spot || '—'],
     ['Quantity', qty],
     ['Container', (p.container===true||p.container==='true') ? 'Yes' : 'In ground'],
     ['Tags', p.tags || '—'],
