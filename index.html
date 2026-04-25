@@ -2713,10 +2713,13 @@ function syncBlob(){
 
 async function ghFetch(){
   const t = getToken(); if (!t) throw new Error('no token');
-  // Cache-bust the URL — defends against browser/CDN intermediaries returning stale data.
+  // Cache-bust via URL only. NOTE: do NOT add Cache-Control: no-cache as a
+  // request header — GitHub's API CORS policy doesn't allow it, and the
+  // preflight rejection causes "Failed to fetch" with no actual server hit.
+  // The URL timestamp + fetch's cache: 'no-store' is enough.
   const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}?ref=${GH.branch}&_=${Date.now()}`;
   const r = await fetch(url, {
-    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json', 'Cache-Control':'no-cache'},
+    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json'},
     cache: 'no-store',
   });
   if (r.status === 404) return {sha:null, data:null};
