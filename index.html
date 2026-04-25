@@ -113,6 +113,15 @@
   .forecast .day.frost .hi,.forecast .day.frost .lo{color:var(--cool)}
   .forecast .day.warm{background:#2e2014;border-color:#5a3a23}
   .forecast .day.warm .hi{color:var(--warn)}
+  .forecast .day.alert{background:#3a1818;border-color:#7a2a2a;cursor:pointer;position:relative}
+  .forecast .day.alert .hi,.forecast .day.alert .lo{color:#f59a8a}
+  .forecast .day.alert::after{content:"!";position:absolute;top:2px;right:5px;font-weight:700;color:#f59a8a;font-size:11px}
+  .forecast .day.alert:hover{background:#4a1f1f}
+  [data-theme="light"] .forecast .day.alert{background:#fadcd8;border-color:#c97a70}
+  [data-theme="light"] .forecast .day.alert .hi,
+  [data-theme="light"] .forecast .day.alert .lo{color:#9a3020}
+  [data-theme="light"] .forecast .day.alert::after{color:#9a3020}
+  [data-theme="light"] .forecast .day.alert:hover{background:#f5c8c0}
   .forecast .day.rain{position:relative}
   .forecast .day .rain{display:block;color:var(--cool);font-size:11px;margin-top:2px}
   details{margin-top:8px}
@@ -228,8 +237,10 @@
       radial-gradient(900px 500px at 0% 100%, #ece5d0 0%, transparent 55%),
       var(--bg);
   }
-  [data-theme="light"] button{color:#fff}
-  [data-theme="light"] button:hover{background:var(--accent-deep)}
+  [data-theme="light"] button:not(.ghost){color:#fff}
+  [data-theme="light"] button:not(.ghost):hover{background:var(--accent-deep)}
+  [data-theme="light"] button.ghost{color:var(--ink);border-color:var(--line2)}
+  [data-theme="light"] button.ghost:hover{background:var(--panel2);color:var(--accent-deep);border-color:var(--accent)}
   [data-theme="light"] tr.dead td{color:#a09a8a;text-decoration-color:#bbb}
   [data-theme="light"] tr.dead td a.namelink{color:#a09a8a}
   [data-theme="light"] .pill.rip{background:#f5efde;color:#7a7466;border-color:#c7bfa6}
@@ -397,6 +408,15 @@
     <button id="importBtn" class="ghost">Import</button>
     <input type="file" id="importFile" accept="application/json" style="display:none">
     <button id="resetBtn" class="ghost" style="margin-left:auto">Reset all</button>
+  </div>
+</div>
+
+<div class="modal-back" id="weatherModal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="close" id="weatherClose" aria-label="Close">×</button>
+    <h3 id="weatherDay"></h3>
+    <p class="lat" id="weatherSummary"></p>
+    <div id="weatherAlerts"></div>
   </div>
 </div>
 
@@ -739,12 +759,40 @@ async function fetchForecast(force=false){
   }
 }
 
+function dayAlerts(d, units){
+  const u = units==='C' ? '°C' : '°F';
+  const pu = units==='C' ? 'mm' : 'in';
+  const frostT = units==='C' ? 2 : 36;
+  const heatT  = units==='C' ? 31 : 88;
+  const windT  = 25;
+  const heavyRain = units==='C' ? 12 : 0.5;
+  const alerts = [];
+  if (d.lo <= frostT){
+    alerts.push({label:'Frost risk',
+      detail:`Overnight low of ${Math.round(d.lo)}${u}. Cover tender or recently-planted trees with frost cloth, and bring potted plants in or against the house.`});
+  }
+  if (d.hi >= heatT){
+    alerts.push({label:'Extreme heat',
+      detail:`High of ${Math.round(d.hi)}${u}. Deep-water established trees and check container plants twice. Variegated and spring-foliage maples (Shin Deshojo, Ukigumo, Asayake) burn fast — give afternoon shade.`});
+  }
+  if (d.wind >= windT){
+    alerts.push({label:'High wind',
+      detail:`Gusts up to ${Math.round(d.wind)} mph. Move hanging pots (Asayake, Rikuzen Shidare) to a sheltered spot. Check stake ties on young trees.`});
+  }
+  if (d.pcp >= heavyRain){
+    alerts.push({label:'Heavy rain',
+      detail:`${Number(d.pcp).toFixed(2)} ${pu} expected. Skip watering. After: check mulch washouts, stake ties, and standing water near roots.`});
+  }
+  return alerts;
+}
+
 function renderForecast(){
   const f = state.forecast; if (!f) return;
-  const u = state.settings.units==='C' ? '°C' : '°F';
-  const pu = state.settings.units==='C' ? 'mm' : 'in';
-  const frostThresh = state.settings.units==='C' ? 2 : 36;
-  const warmThresh  = state.settings.units==='C' ? 27 : 80;
+  const units = state.settings.units;
+  const u = units==='C' ? '°C' : '°F';
+  const pu = units==='C' ? 'mm' : 'in';
+  const frostThresh = units==='C' ? 2 : 36;
+  const warmThresh  = units==='C' ? 27 : 80;
   const days = f.time.map((t,i)=>({
     date: t,
     hi: f.temperature_2m_max[i],
@@ -753,12 +801,19 @@ function renderForecast(){
     pcp: f.precipitation_sum[i],
     wind: f.wind_speed_10m_max[i],
   }));
-  $('#forecast').innerHTML = days.map(d=>{
+  state._forecastDays = days;
+  $('#forecast').innerHTML = days.map((d,i)=>{
     const dt = new Date(d.date+'T12:00:00');
     const dow = dt.toLocaleDateString(undefined,{weekday:'short'});
     const md = dt.toLocaleDateString(undefined,{month:'numeric',day:'numeric'});
-    const cls = d.lo <= frostThresh ? 'frost' : (d.hi >= warmThresh ? 'warm' : '');
-    return `<div class="day ${cls}">
+    const alerts = dayAlerts(d, units);
+    let cls = '';
+    if (alerts.length) cls = 'alert';
+    else if (d.lo <= frostThresh) cls = 'frost';
+    else if (d.hi >= warmThresh) cls = 'warm';
+    const titleAttr = alerts.length
+      ? `title="${alerts.map(a=>a.label).join(' · ')} — click for details"` : '';
+    return `<div class="day ${cls}" data-day="${i}" ${titleAttr}>
       <div class="d">${dow} ${md}</div>
       <div class="hi">${Math.round(d.hi)}${u}</div>
       <div class="lo">${Math.round(d.lo)}${u}</div>
@@ -1037,7 +1092,42 @@ function openInfo(id){
 }
 $('#infoClose').onclick = ()=> $('#infoModal').classList.remove('show');
 $('#infoModal').addEventListener('click', e=>{ if (e.target.id==='infoModal') $('#infoModal').classList.remove('show'); });
-document.addEventListener('keydown', e=>{ if (e.key==='Escape') $('#infoModal').classList.remove('show'); });
+document.addEventListener('keydown', e=>{
+  if (e.key==='Escape'){
+    $('#infoModal').classList.remove('show');
+    $('#weatherModal').classList.remove('show');
+  }
+});
+
+// Weather alert modal
+function openWeather(idx){
+  const days = state._forecastDays || [];
+  const d = days[idx]; if (!d) return;
+  const units = state.settings.units;
+  const u = units==='C' ? '°C' : '°F';
+  const pu = units==='C' ? 'mm' : 'in';
+  const dt = new Date(d.date+'T12:00:00');
+  $('#weatherDay').textContent = dt.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'});
+  $('#weatherSummary').textContent =
+    `High ${Math.round(d.hi)}${u} · Low ${Math.round(d.lo)}${u} · ${Number(d.pcp||0).toFixed(2)} ${pu} precip (${d.pop||0}%) · wind to ${Math.round(d.wind||0)} mph`;
+  const alerts = dayAlerts(d, units);
+  if (!alerts.length){
+    $('#weatherAlerts').innerHTML = `<p style="color:var(--muted);font-size:14px;margin:8px 0 0">No weather alerts for this day.</p>`;
+  } else {
+    $('#weatherAlerts').innerHTML = alerts.map(a=>`
+      <div style="margin-top:14px;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg2)">
+        <div style="font-weight:600;color:#f59a8a;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${escapeHtml(a.label)}</div>
+        <div style="font-size:14px;line-height:1.5">${escapeHtml(a.detail)}</div>
+      </div>`).join('');
+  }
+  $('#weatherModal').classList.add('show');
+}
+$('#weatherClose').onclick = ()=> $('#weatherModal').classList.remove('show');
+$('#weatherModal').addEventListener('click', e=>{ if (e.target.id==='weatherModal') $('#weatherModal').classList.remove('show'); });
+$('#forecast').addEventListener('click', e=>{
+  const day = e.target.closest('.day');
+  if (day && day.classList.contains('alert')) openWeather(parseInt(day.dataset.day, 10));
+});
 $('#addPlantBtn').onclick = ()=>{
   const p = {id:uid(),name:'New plant',type:'',spot:'',container:false,tags:'',notes:''};
   state.plants.push(p); save(); renderPlants(); openEdit(p.id);
