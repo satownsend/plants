@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Plants">
 <title>Our Plants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#08191c;            /* deep teal, near-black */
@@ -59,7 +62,7 @@
   a{color:var(--accent);text-decoration:none}
   .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
   header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-  h1{font:600 24px/1.2 "SF Pro Display",-apple-system,BlinkMacSystemFont,sans-serif;margin:0;letter-spacing:-.01em;color:var(--accent)}
+  h1{font:italic 700 30px/1.1 "Fraunces", "Playfair Display", Georgia, serif;margin:0;letter-spacing:-.015em;color:var(--accent);font-variation-settings:"opsz" 96, "SOFT" 50}
   h2{font:600 14px/1 "SF Pro Display",sans-serif;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
   .sub{color:var(--muted);font-size:13px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -204,6 +207,17 @@
     padding:10px 12px;box-shadow:var(--shadow);z-index:5;min-width:180px}
   .cols-pop label{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--ink);font-size:13px;cursor:pointer}
   .cols-pop label input[type=checkbox]{margin:0}
+  .log-plant-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px;box-shadow:var(--shadow);z-index:6;max-height:340px;display:flex;flex-direction:column;gap:8px}
+  .log-plant-pop input.lpp-search{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:13px;width:100%}
+  .log-plant-pop .lpp-actions{display:flex;gap:6px;justify-content:space-between;align-items:center}
+  .log-plant-pop .lpp-yard{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--panel2);border-radius:6px;color:var(--ink);font-size:13px;cursor:pointer}
+  .log-plant-pop .lpp-list{overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px}
+  .log-plant-pop .lpp-list label{display:flex;align-items:center;gap:8px;padding:4px 6px;color:var(--ink);font-size:13px;cursor:pointer;border-radius:4px}
+  .log-plant-pop .lpp-list label:hover{background:var(--panel2)}
+  .log-plant-pop .lpp-list label input{margin:0}
+  .log-plant-pop .lpp-done{align-self:flex-end}
+  .log-plant-pop.is-yard .lpp-list{opacity:.45;pointer-events:none}
   #plantTable.hide-qty [data-col="qty"],
   #plantTable.hide-category [data-col="category"],
   #plantTable.hide-type [data-col="type"],
@@ -446,8 +460,9 @@
 
   <div class="panel">
     <h2>Quick log</h2>
-    <div class="row" style="margin-bottom:8px">
-      <select id="logPlant" style="flex:1;min-width:160px"></select>
+    <div class="row" style="margin-bottom:8px;position:relative">
+      <button id="logPlantBtn" type="button" style="flex:1;min-width:160px;text-align:left;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Select plants…</button>
+      <div id="logPlantPop" class="log-plant-pop" role="dialog" aria-label="Pick plants" style="display:none"></div>
       <select id="logAction" style="width:140px">
         <option value="watered">watered</option>
         <option value="fertilized">fertilized</option>
@@ -482,6 +497,7 @@
   <div class="panel full">
     <h2>Plants <span class="small">(click "edit" on a row)</span></h2>
     <div class="filter-row">
+      <input type="search" id="plantFilter" placeholder="Filter plants by name, type, location, tag…" style="flex:1;min-width:160px;max-width:340px">
       <label><input type="checkbox" id="showDead"> Show departed (RIP)</label>
       <span style="position:relative">
         <button class="ghost tiny" id="colsBtn" aria-haspopup="true" aria-expanded="false">⚙ columns</button>
@@ -1522,7 +1538,14 @@ function renderPlants(){
   const tb = $('#plantTable tbody');
   tb.innerHTML = '';
   const showDead = $('#showDead').checked;
+  const q = ($('#plantFilter').value || '').trim().toLowerCase();
   let visible = state.plants.filter(p=> showDead || !p.dead);
+  if (q){
+    visible = visible.filter(p => {
+      const hay = [p.name, p.type, p.category, p.spot, p.tags, p.notes].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
   const cmp = sortFns[sortState.col] || sortFns.name;
   visible.sort(cmp);
   if (sortState.dir === 'desc') visible.reverse();
@@ -1570,15 +1593,11 @@ function renderPlants(){
   $('#plantCount').textContent = `${state.plants.length} total`;
   $('#plantStats').textContent = `${live} living · ${dead} departed`;
 
-  // refresh log dropdown — only living plants
-  const sel = $('#logPlant');
-  const prevValue = sel.value;
-  sel.innerHTML = state.plants.filter(p=>!p.dead).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
-    + '<option value="__all__">— all living plants —</option>'
-    + '<option value="__yard__">— yard-wide event —</option>';
-  if (prevValue) sel.value = prevValue;
+  // refresh log plant picker label (multi-select selection summary)
+  refreshLogPlantBtn();
 }
 $('#showDead').addEventListener('change', renderPlants);
+$('#plantFilter').addEventListener('input', renderPlants);
 
 // Columns popover
 function buildColsPop(){
@@ -1983,16 +2002,106 @@ function applyTempRowVisibility(){
   if (unitEl) unitEl.textContent = tempUnitSymbol();
 }
 function resetLogDateTime(){
+  // Date defaults to today; time stays blank (optional). "now" button fills both.
+  $('#logDate').value = ymd(new Date());
+  $('#logTime').value = '';
+}
+function fillLogNow(){
   const now = new Date();
   $('#logDate').value = ymd(now);
   $('#logTime').value = hmNow(now);
 }
 resetLogDateTime();
 applyTempRowVisibility();
-$('#logNowBtn').onclick = resetLogDateTime;
+$('#logNowBtn').onclick = fillLogNow;
 $('#logAction').addEventListener('change', applyTempRowVisibility);
+
+// Multi-select plant picker for Quick log
+const logPlantState = { selected: new Set(), yardWide: false, search: '' };
+function refreshLogPlantBtn(){
+  const btn = $('#logPlantBtn'); if (!btn) return;
+  if (logPlantState.yardWide){
+    btn.textContent = '🌿 Yard-wide event';
+    return;
+  }
+  // Drop any selected ids that no longer exist (e.g., after sheet pull)
+  const living = state.plants.filter(p => !p.dead);
+  const livingIds = new Set(living.map(p => p.id));
+  for (const id of [...logPlantState.selected]) if (!livingIds.has(id)) logPlantState.selected.delete(id);
+  const n = logPlantState.selected.size;
+  if (n === 0) btn.textContent = 'Select plants…';
+  else if (n === living.length) btn.textContent = `All living plants (${n})`;
+  else if (n <= 2){
+    btn.textContent = [...logPlantState.selected].map(id => (state.plants.find(p => p.id === id)?.name || '?')).join(', ');
+  } else {
+    const first = state.plants.find(p => p.id === [...logPlantState.selected][0])?.name || '?';
+    btn.textContent = `${first} + ${n - 1} more`;
+  }
+}
+function buildLogPlantPop(){
+  const pop = $('#logPlantPop');
+  const living = state.plants.filter(p => !p.dead).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const q = (logPlantState.search || '').toLowerCase();
+  const filtered = q ? living.filter(p => (p.name||'').toLowerCase().includes(q)) : living;
+  pop.innerHTML = `
+    <input class="lpp-search" type="search" id="lppSearch" placeholder="Filter…" value="${escapeHtml(logPlantState.search)}">
+    <label class="lpp-yard"><input type="checkbox" id="lppYard" ${logPlantState.yardWide ? 'checked' : ''}> 🌿 Yard-wide event (single entry, no plant)</label>
+    <div class="lpp-actions">
+      <div style="display:flex;gap:6px">
+        <button type="button" class="ghost tiny" id="lppSelectAll">Select all living</button>
+        <button type="button" class="ghost tiny" id="lppClear">Clear</button>
+      </div>
+      <span class="small" style="color:var(--muted)" id="lppCount"></span>
+    </div>
+    <div class="lpp-list" id="lppList">
+      ${filtered.map(p => `<label><input type="checkbox" data-id="${p.id}" ${logPlantState.selected.has(p.id) ? 'checked' : ''}> ${escapeHtml(p.name)}</label>`).join('') || '<div style="padding:10px;color:var(--muted);text-align:center;font-size:12px">No matches.</div>'}
+    </div>
+    <button type="button" class="tiny lpp-done" id="lppDone">Done</button>
+  `;
+  pop.classList.toggle('is-yard', logPlantState.yardWide);
+  $('#lppCount').textContent = logPlantState.yardWide ? 'yard-wide' : `${logPlantState.selected.size} selected`;
+  $('#lppSearch').addEventListener('input', e => { logPlantState.search = e.target.value; buildLogPlantPop(); $('#lppSearch').focus(); });
+  $('#lppYard').addEventListener('change', e => {
+    logPlantState.yardWide = e.target.checked;
+    if (logPlantState.yardWide) logPlantState.selected.clear();
+    buildLogPlantPop();
+  });
+  $('#lppSelectAll').onclick = () => {
+    if (logPlantState.yardWide) return;
+    for (const p of living) logPlantState.selected.add(p.id);
+    buildLogPlantPop();
+  };
+  $('#lppClear').onclick = () => {
+    logPlantState.selected.clear();
+    logPlantState.yardWide = false;
+    buildLogPlantPop();
+  };
+  $('#lppList').addEventListener('change', e => {
+    const cb = e.target.closest('input[data-id]'); if (!cb) return;
+    const id = cb.dataset.id;
+    if (cb.checked) logPlantState.selected.add(id);
+    else logPlantState.selected.delete(id);
+    $('#lppCount').textContent = logPlantState.yardWide ? 'yard-wide' : `${logPlantState.selected.size} selected`;
+  });
+  $('#lppDone').onclick = () => toggleLogPlantPop(false);
+}
+function toggleLogPlantPop(force){
+  const pop = $('#logPlantPop');
+  const open = force === undefined ? pop.style.display === 'none' || !pop.style.display : !!force;
+  if (open){ buildLogPlantPop(); pop.style.display = 'flex'; }
+  else { pop.style.display = 'none'; refreshLogPlantBtn(); }
+}
+$('#logPlantBtn').addEventListener('click', e => { e.stopPropagation(); toggleLogPlantPop(); });
+$('#logPlantPop').addEventListener('click', e => e.stopPropagation());
+document.addEventListener('click', e => {
+  const pop = $('#logPlantPop');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && e.target.id !== 'logPlantBtn'){
+    toggleLogPlantPop(false);
+  }
+});
+refreshLogPlantBtn();
+
 $('#logBtn').onclick = ()=>{
-  const pid = $('#logPlant').value;
   const action = $('#logAction').value;
   const note = $('#logNote').value.trim();
   const date = $('#logDate').value || ymd(new Date());
@@ -2000,9 +2109,12 @@ $('#logBtn').onclick = ()=>{
   const tempRaw = isFrostAction(action) ? $('#logTemp').value.trim() : '';
   const temp = tempRaw === '' ? undefined : (parseFloat(tempRaw));
   let targets;
-  if (pid === '__all__') targets = state.plants.map(p=>p.id);
-  else if (pid === '__yard__') targets = [''];   // single yard-wide entry, plantId stays empty
-  else targets = [pid];
+  if (logPlantState.yardWide) targets = [''];
+  else targets = [...logPlantState.selected];
+  if (!targets.length){
+    alert('Pick at least one plant (or a yard-wide event) before logging.');
+    return;
+  }
   for (const t of targets){
     const entry = {id:uid(), plantId:t, action, note, date, time};
     if (temp !== undefined && !isNaN(temp)) entry.temp = temp;
