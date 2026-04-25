@@ -1284,8 +1284,15 @@ async function pullFromRemote(){
     } else {
       // First time — push current state up directly (don't call pushNow, it'd re-enter guard)
       setSyncStatus('pushing initial…');
-      const sha = await ghPut(syncBlob(), null);
-      lastSha = sha;
+      try {
+        const sha = await ghPut(syncBlob(), null);
+        lastSha = sha;
+      } catch(e){
+        // If the file actually existed under a race, fall back to merge-and-push
+        if (/\b409\b/.test(e.message) || /\b422\b/.test(e.message)){
+          await pushWithRetry(2);
+        } else throw e;
+      }
       suspendSync = true; saveLocal(); suspendSync = false;
       setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
     }
@@ -1299,24 +1306,37 @@ async function pushNow(){
   syncing = true;
   try {
     setSyncStatus('pushing…');
-    // Refetch sha + merge log first to avoid clobbering remote-only entries
-    let remote = null;
-    try { remote = await ghFetch(); } catch(e){ if (!/^fetch /.test(e.message)) throw e; }
-    let mergedLog = state.log;
-    if (remote && remote.data && remote.data.log){
-      const localIds = new Set((state.log||[]).map(e=>e.id));
-      const remoteOnly = remote.data.log.filter(e=>e.id && !localIds.has(e.id));
-      mergedLog = [...remoteOnly, ...state.log];
-    }
-    state.log = mergedLog;
-    const blob = syncBlob();
-    const newSha = await ghPut(blob, remote ? remote.sha : null);
-    lastSha = newSha;
+    await pushWithRetry(2);
+    lastSha = lastSha; // set inside pushWithRetry
     suspendSync = true; saveLocal(); suspendSync = false;
     setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
   } catch(e){
     setSyncStatus('error: '+e.message, 'err');
   } finally { syncing = false; }
+}
+
+async function pushWithRetry(triesLeft){
+  // Refetch current remote, merge log, then PUT with the fresh sha.
+  // On 409 (conflict), retry once with another fresh sha.
+  const remote = await ghFetch();   // throws on real errors; returns {sha:null,data:null} on 404
+  let mergedLog = state.log;
+  if (remote && remote.data && remote.data.log){
+    const localIds = new Set((state.log||[]).map(e=>e.id));
+    const remoteOnly = remote.data.log.filter(e=>e.id && !localIds.has(e.id));
+    mergedLog = [...remoteOnly, ...state.log];
+  }
+  state.log = mergedLog;
+  const blob = syncBlob();
+  try {
+    const newSha = await ghPut(blob, remote ? remote.sha : null);
+    lastSha = newSha;
+  } catch(e){
+    if (/\b409\b/.test(e.message) && triesLeft > 1){
+      // Conflict — someone else wrote in the meantime. Refetch and retry.
+      return pushWithRetry(triesLeft - 1);
+    }
+    throw e;
+  }
 }
 
 function queueSync(){
