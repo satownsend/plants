@@ -1747,6 +1747,7 @@ function csvToPlants(rows, existingByName){
       purchased: cDate>=0 ? normalizeDate(row[cDate]) : '',
       dead: isDead,
       quantity: cQty>=0 ? Math.max(1, parseInt(row[cQty]||'1', 10) || 1) : 1,
+      photos: existing.photos || [],
     });
   }
   return plants;
