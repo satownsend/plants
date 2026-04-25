@@ -201,7 +201,7 @@
   tr.dead td{color:#6b6f63;text-decoration:line-through;text-decoration-color:#444}
   tr.dead td a.namelink{color:#6b6f63}
   tr.dead td button,tr.dead td .pill{text-decoration:none}
-  .filter-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:13px;color:var(--muted)}
+  .filter-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:13px;color:var(--muted);flex-wrap:wrap}
   .filter-row label{cursor:pointer}
   .cols-pop{position:absolute;top:calc(100% + 6px);left:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:10px 12px;box-shadow:var(--shadow);z-index:5;min-width:180px}
@@ -249,6 +249,8 @@
   #recentLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   #recentLog td{padding:5px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
   #recentLog .empty{display:block;padding:14px;color:var(--muted);text-align:center}
+  .log-row{cursor:pointer}
+  .log-row:hover td{background:var(--panel2)}
   a.namelink{font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--line2);cursor:pointer}
   a.namelink:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .modal-back{position:fixed;inset:0;background:rgba(5,10,7,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -306,6 +308,8 @@
     }
     /* Quick log row stacks */
     .panel select#logPlant{min-width:0;width:100%;flex:1 1 100%}
+    .panel #logPlantBtn{min-width:0;width:100%;flex:1 1 100%}
+    #plantFilter{max-width:none;width:100%;flex:1 1 100%}
     .panel select#logAction{width:100%;flex:1 1 100%}
     /* Plant table → cards */
     #plantTable thead{display:none}
@@ -639,6 +643,36 @@
         <button id="lightboxPrev" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">‹ Prev</button>
         <button id="lightboxNext" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">Next ›</button>
         <button id="lightboxDelete" class="ghost tiny" style="color:#f59a8a;border-color:rgba(245,154,138,.3)">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="logEditModal" style="z-index:55">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:440px">
+    <button class="close" id="logEditClose" aria-label="Close">×</button>
+    <h3>Edit log entry</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+      <label class="small">Date<input type="date" id="logEditDate" style="width:100%;margin-top:3px"></label>
+      <label class="small">Time (optional)<input type="time" id="logEditTime" style="width:100%;margin-top:3px"></label>
+    </div>
+    <label class="small" style="display:block;margin-top:10px">Action
+      <select id="logEditAction" style="width:100%;margin-top:3px"></select>
+    </label>
+    <label class="small" style="display:block;margin-top:10px">Plant
+      <select id="logEditPlant" style="width:100%;margin-top:3px"></select>
+    </label>
+    <label class="small" id="logEditTempLabel" style="display:none;margin-top:10px">Low temp <span id="logEditTempUnit" style="color:var(--muted)">°F</span>
+      <input type="number" id="logEditTemp" step="1" placeholder="e.g. 28" style="width:100%;margin-top:3px">
+    </label>
+    <label class="small" style="display:block;margin-top:10px">Note
+      <input type="text" id="logEditNote" style="width:100%;margin-top:3px">
+    </label>
+    <div class="row" style="margin-top:14px;justify-content:space-between">
+      <button class="ghost tiny" id="logEditDelete" style="color:#f59a8a;border-color:rgba(245,154,138,.3)">Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="ghost tiny" id="logEditCancel">Cancel</button>
+        <button id="logEditSave">Save</button>
       </div>
     </div>
   </div>
@@ -1680,7 +1714,7 @@ function openInfo(id){
     histEl.innerHTML = '<table><thead><tr><th>When</th><th>Action</th><th>Note</th></tr></thead><tbody>'
       + entries.map(e => {
         const tempBadge = e.temp !== undefined ? `<span style="color:var(--cool)">${escapeHtml(fmtTemp(e.temp))}</span>${e.note ? ' · ' : ''}` : '';
-        return `<tr>
+        return `<tr class="log-row" data-log-id="${e.id}">
           <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
           <td class="action">${escapeHtml(e.action || '')}</td>
           <td>${tempBadge}${escapeHtml(e.note || '')}</td>
@@ -1911,6 +1945,7 @@ document.addEventListener('keydown', e=>{
     $('#infoModal').classList.remove('show');
     $('#weatherModal').classList.remove('show');
     $('#lightbox').classList.remove('show');
+    $('#logEditModal').classList.remove('show');
   }
 });
 
@@ -2134,10 +2169,90 @@ function renderLog(){
       const p = state.plants.find(x=>x.id===e.plantId);
       const who = p ? p.name : (e.plantId === '' ? 'Yard' : '?');
       const tempBadge = e.temp !== undefined ? `<span class="meta">${escapeHtml(fmtTemp(e.temp))}${e.note ? ' · ' : ''}</span>` : '';
-      return `<tr><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+      return `<tr class="log-row" data-log-id="${e.id}"><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
+
+// Log edit modal
+let editingLogId = null;
+function openLogEdit(logId){
+  const e = (state.log||[]).find(x => x.id === logId);
+  if (!e) return;
+  editingLogId = logId;
+  // Action dropdown — clone options from the Quick log action select
+  const actionSel = $('#logEditAction');
+  const sourceOpts = $('#logAction').innerHTML;
+  actionSel.innerHTML = sourceOpts;
+  // If the existing action isn't in the canonical list (legacy entries), add it
+  if (![...actionSel.options].some(o => o.value === e.action) && e.action){
+    const opt = document.createElement('option');
+    opt.value = e.action; opt.textContent = e.action;
+    actionSel.appendChild(opt);
+  }
+  actionSel.value = e.action || '';
+  // Plant dropdown — all plants (alive + dead) + yard-wide. If the entry's plantId
+  // points at a deleted plant, still list it so it doesn't silently change on save.
+  const plantSel = $('#logEditPlant');
+  const plants = state.plants.slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  let opts = '<option value="__yard__">— yard-wide event —</option>';
+  opts += plants.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.dead ? ' (RIP)' : ''}</option>`).join('');
+  if (e.plantId && !plants.some(p => p.id === e.plantId)){
+    opts += `<option value="${e.plantId}">${escapeHtml(e.plantId)} (missing plant)</option>`;
+  }
+  plantSel.innerHTML = opts;
+  plantSel.value = e.plantId === '' ? '__yard__' : (e.plantId || '__yard__');
+  // Fields
+  $('#logEditDate').value = e.date || '';
+  $('#logEditTime').value = e.time || '';
+  $('#logEditNote').value = e.note || '';
+  $('#logEditTemp').value = (e.temp !== undefined && e.temp !== null) ? e.temp : '';
+  $('#logEditTempUnit').textContent = tempUnitSymbol();
+  applyLogEditTempVisibility();
+  $('#logEditModal').classList.add('show');
+}
+function applyLogEditTempVisibility(){
+  const v = $('#logEditAction').value;
+  $('#logEditTempLabel').style.display = isFrostAction(v) ? 'block' : 'none';
+}
+$('#logEditAction').addEventListener('change', applyLogEditTempVisibility);
+$('#logEditClose').onclick = () => $('#logEditModal').classList.remove('show');
+$('#logEditCancel').onclick = () => $('#logEditModal').classList.remove('show');
+$('#logEditModal').addEventListener('click', e => { if (e.target.id === 'logEditModal') $('#logEditModal').classList.remove('show'); });
+$('#logEditSave').onclick = () => {
+  const e = (state.log||[]).find(x => x.id === editingLogId);
+  if (!e){ $('#logEditModal').classList.remove('show'); return; }
+  const action = $('#logEditAction').value;
+  const plantSel = $('#logEditPlant').value;
+  e.action = action;
+  e.plantId = plantSel === '__yard__' ? '' : plantSel;
+  e.date = $('#logEditDate').value || ymd(new Date());
+  e.time = $('#logEditTime').value || '';
+  e.note = $('#logEditNote').value.trim();
+  if (isFrostAction(action)){
+    const t = $('#logEditTemp').value.trim();
+    if (t === '') delete e.temp;
+    else { const n = parseFloat(t); if (!isNaN(n)) e.temp = n; else delete e.temp; }
+  } else {
+    delete e.temp;
+  }
+  $('#logEditModal').classList.remove('show');
+  save(); render();
+};
+$('#logEditDelete').onclick = () => {
+  if (!confirm('Delete this log entry?')) return;
+  state.log = (state.log||[]).filter(x => x.id !== editingLogId);
+  $('#logEditModal').classList.remove('show');
+  save(); render();
+};
+// Click delegation: any .log-row in any panel opens the edit modal
+document.addEventListener('click', e => {
+  const row = e.target.closest('.log-row');
+  if (!row) return;
+  // Don't trigger if click was on a link/button inside the row (none today, but future-proof)
+  if (e.target.closest('a, button')) return;
+  openLogEdit(row.dataset.logId);
+});
 
 /* ---------- Cloudflare R2 photo storage ---------- */
 const R2_CREDS_KEY = 'yardDashboard.r2creds';
@@ -2955,7 +3070,7 @@ function renderFrostLog(){
       const pillCls = e.action === 'frost damage' ? 'pill-damage' : 'pill-frost';
       const who = p ? p.name : (e.plantId === '' ? '<em style="color:var(--muted)">Yard</em>' : '—');
       const temp = e.temp !== undefined ? fmtTemp(e.temp) : '';
-      return `<tr>
+      return `<tr class="log-row" data-log-id="${e.id}">
         <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
         <td class="action"><span class="${pillCls}">${escapeHtml(e.action)}</span></td>
         <td class="when">${temp ? escapeHtml(temp) : '<span style="color:var(--muted)">—</span>'}</td>
