@@ -3456,12 +3456,14 @@ function renderStats(){
     target.innerHTML = `<div class="stats-pie"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-label="${ariaLabel}">${paths}</svg><div class="stats-legend">${legend}</div></div>`;
   };
 
-  // Pie 1: living plants by primary tag
+  // Pie 1: living plants by primary tag (weighted by quantity — a row with
+  // quantity 3 contributes 3 to the slice, matching how the bar charts count).
   const alive = (state.plants||[]).filter(p => !p.dead);
+  const qtyOf = (p) => Math.max(1, parseInt(p.quantity||1, 10) || 1);
   const tagCounts = new Map();
   for (const p of alive){
     const first = (p.tags||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)[0] || 'untagged';
-    tagCounts.set(first, (tagCounts.get(first)||0) + 1);
+    tagCounts.set(first, (tagCounts.get(first)||0) + qtyOf(p));
   }
   drawPie(pieEl, tagCounts, 'Plants by tag', 'No plants yet.');
 
@@ -3481,7 +3483,7 @@ function renderStats(){
   };
   for (const p of alive){
     const sp = toSpecies(p.type);
-    speciesCounts.set(sp, (speciesCounts.get(sp)||0) + 1);
+    speciesCounts.set(sp, (speciesCounts.get(sp)||0) + qtyOf(p));
   }
   drawPie(speciesEl, speciesCounts, 'Plants by species', 'No plants yet.');
 
