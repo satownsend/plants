@@ -67,6 +67,17 @@
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media (max-width:900px){.grid{grid-template-columns:1fr}}
   .stats-row{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:24px;align-items:start}
+  .upcoming-alerts{margin-top:12px;padding-top:12px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px}
+  .upcoming-alerts:empty{display:none}
+  .upcoming-alerts .ua-head{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:2px;font-weight:600}
+  .upcoming-alerts .ua{display:grid;grid-template-columns:auto auto 1fr;gap:8px;align-items:start;font-size:12px;line-height:1.4;padding:6px 8px;border-radius:6px;background:var(--panel2);cursor:pointer}
+  .upcoming-alerts .ua:hover{background:var(--chip)}
+  .upcoming-alerts .ua-day{color:var(--ink-soft);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .upcoming-alerts .ua-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+  .upcoming-alerts .ua-pill.frost{background:rgba(126,196,204,.18);color:var(--cool);border:1px solid rgba(126,196,204,.35)}
+  .upcoming-alerts .ua-pill.heat{background:rgba(224,138,74,.18);color:var(--warn);border:1px solid rgba(224,138,74,.35)}
+  .upcoming-alerts .ua-pill.wind{background:rgba(168,184,190,.18);color:var(--ink-soft);border:1px solid rgba(168,184,190,.35)}
+  .upcoming-alerts .ua-detail{color:var(--ink-soft)}
   .gallery{margin-bottom:16px;border-radius:14px;overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line);background:#000}
   .gallery-stage{position:relative;width:100%;aspect-ratio:3/2;background:#0a0a0a;max-height:560px}
   @media (max-width:700px){.gallery-stage{aspect-ratio:4/3;max-height:none}}
@@ -479,6 +490,7 @@
     <h2>Forecast</h2>
     <div class="forecast" id="forecast"></div>
     <div class="small" style="margin-top:8px" id="weatherNote">—</div>
+    <div id="upcomingAlerts" class="upcoming-alerts"></div>
   </div>
 
   <div class="panel">
@@ -1428,6 +1440,31 @@ function renderForecast(){
   note.push(`${totalPcp.toFixed(2)} ${pu} precip`);
   note.push(`gusts to ${Math.round(maxWind)} mph`);
   $('#weatherNote').textContent = note.join(' · ');
+  // Upcoming alerts list (frost / heat / wind across all forecast days)
+  const ua = $('#upcomingAlerts');
+  if (ua){
+    const items = [];
+    days.forEach((d, i) => {
+      const dt = new Date(d.date+'T12:00:00');
+      const dayLabel = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
+        : dt.toLocaleDateString(undefined, { weekday:'short', month:'numeric', day:'numeric' });
+      for (const a of dayAlerts(d, units)){
+        const cls = /frost/i.test(a.label) ? 'frost' : /heat/i.test(a.label) ? 'heat' : 'wind';
+        items.push({ idx: i, dayLabel, cls, label: a.label, detail: a.detail });
+      }
+    });
+    if (items.length){
+      ua.innerHTML = `<div class="ua-head">Upcoming alerts</div>` + items.map(it =>
+        `<div class="ua" data-day="${it.idx}" title="Click for details">
+          <span class="ua-day">${escapeHtml(it.dayLabel)}</span>
+          <span class="ua-pill ${it.cls}">${escapeHtml(it.label)}</span>
+          <span class="ua-detail">${escapeHtml(it.detail)}</span>
+        </div>`
+      ).join('');
+    } else {
+      ua.innerHTML = '';
+    }
+  }
   state.computed = { days, frostThresh, warmThresh };
   buildBrief();
 }
@@ -2192,6 +2229,10 @@ $('#weatherModal').addEventListener('click', e=>{ if (e.target.id==='weatherModa
 $('#forecast').addEventListener('click', e=>{
   const day = e.target.closest('.day');
   if (day && day.classList.contains('alert')) openWeather(parseInt(day.dataset.day, 10));
+});
+$('#upcomingAlerts').addEventListener('click', e=>{
+  const row = e.target.closest('.ua');
+  if (row) openWeather(parseInt(row.dataset.day, 10));
 });
 $('#addPlantBtn').onclick = ()=>{
   const p = {id:uid(),name:'New plant',type:'',spot:'',container:false,tags:'',notes:''};
