@@ -275,6 +275,16 @@
   .photo-grid .ph:hover img{transform:scale(1.04)}
   .photo-grid .ph .date{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:10px;padding:14px 6px 4px;text-align:center;font-weight:600;letter-spacing:.04em}
   .photo-grid .empty{grid-column:1/-1;color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:18px}
+  .photo-timeline{margin-bottom:10px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--bg2)}
+  .photo-timeline .pt-stage{position:relative;width:100%;aspect-ratio:4/3;background:#000;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .photo-timeline .pt-stage img{width:100%;height:100%;object-fit:contain;display:block}
+  .photo-timeline .pt-counter{position:absolute;top:8px;right:10px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:3px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
+  .photo-timeline .pt-controls{padding:10px 12px}
+  .photo-timeline .pt-controls input[type=range]{width:100%;accent-color:var(--accent);cursor:grab}
+  .photo-timeline .pt-controls input[type=range]:active{cursor:grabbing}
+  .photo-timeline .pt-meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+  .photo-timeline .pt-current{color:var(--accent);font-weight:600;font-size:13px}
+  .photo-timeline .pt-edge{opacity:.7}
   .then-now{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
   .then-now figure{margin:0;text-align:center}
   .then-now img{width:100%;border-radius:8px;display:block}
@@ -709,6 +719,20 @@
             + Add
             <input type="file" id="photoUploadInput" accept="image/*,.heic,.heif" multiple style="display:none">
           </label>
+        </div>
+      </div>
+      <div id="infoTimeline" class="photo-timeline" style="display:none">
+        <div class="pt-stage">
+          <img id="ptImg" alt="">
+          <div class="pt-counter" id="ptCounter"></div>
+        </div>
+        <div class="pt-controls">
+          <input type="range" id="ptSlider" min="0" max="0" step="1" value="0" aria-label="Photo timeline">
+          <div class="pt-meta">
+            <span id="ptOldestDate" class="pt-edge"></span>
+            <span id="ptCurrentDate" class="pt-current"></span>
+            <span id="ptNewestDate" class="pt-edge"></span>
+          </div>
         </div>
       </div>
       <div id="infoPhotos" class="photo-grid"></div>
@@ -1759,6 +1783,8 @@ let lightboxIdx = 0;
 function renderPhotos(p){
   const grid = $('#infoPhotos');
   const photos = (p.photos || []).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  // Timeline: only show when there are 2+ photos (single photo doesn't need a slider)
+  renderPhotoTimeline(photos);
   if (!photos.length){
     grid.innerHTML = '<div class="empty">No photos yet — tap + Add to upload.</div>';
     return;
@@ -1770,6 +1796,45 @@ function renderPhotos(p){
     const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '';
     return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}"><div class="date">${dt}</div></div>`;
   }).join('');
+}
+
+function renderPhotoTimeline(photos){
+  const tl = $('#infoTimeline');
+  if (!tl) return;
+  if (!photos || photos.length < 2){
+    tl.style.display = 'none';
+    return;
+  }
+  tl.style.display = '';
+  const slider = $('#ptSlider');
+  slider.min = 0;
+  slider.max = photos.length - 1;
+  slider.step = 1;
+  // Default to the newest (rightmost). Preserve existing index if it still fits.
+  const prev = parseInt(slider.value, 10);
+  const idx = (Number.isFinite(prev) && prev >= 0 && prev <= photos.length - 1 && tl.dataset.plantId === currentInfoPlantId)
+    ? prev
+    : photos.length - 1;
+  slider.value = idx;
+  tl.dataset.plantId = currentInfoPlantId;
+  const fmt = d => d ? new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : 'no date';
+  $('#ptOldestDate').textContent = fmt(photos[0].date);
+  $('#ptNewestDate').textContent = fmt(photos[photos.length-1].date);
+  const updateTimeline = (i) => {
+    const ph = photos[i]; if (!ph) return;
+    $('#ptImg').src = r2PublicUrl(ph.key);
+    $('#ptCurrentDate').textContent = fmt(ph.date) + (ph.caption ? ' — ' + ph.caption : '');
+    $('#ptCounter').textContent = `${i + 1} / ${photos.length}`;
+  };
+  updateTimeline(idx);
+  // Replace listener (we re-bind on every render so the captured `photos` is fresh).
+  slider.oninput = (e) => updateTimeline(parseInt(e.target.value, 10));
+  // Click photo → open lightbox at the current index
+  const stage = tl.querySelector('.pt-stage');
+  if (stage) stage.onclick = (e) => {
+    if (e.target.tagName === 'INPUT') return;  // safety: don't trigger from any input inside
+    openLightbox(photos, parseInt(slider.value, 10));
+  };
 }
 
 $('#infoPhotos').addEventListener('click', e=>{
