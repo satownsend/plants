@@ -505,6 +505,10 @@
       <input type="number" id="logTemp" step="1" placeholder="e.g. 28" style="flex:1;min-width:0">
       <span class="small" id="logTempUnit" style="color:var(--muted)">°F</span>
     </div>
+    <div class="row" id="logCausedByRow" style="margin-bottom:8px;gap:6px;display:none;align-items:center">
+      <label class="small" for="logCausedBy" style="color:var(--muted);min-width:64px">Caused by:</label>
+      <select id="logCausedBy" style="flex:1;min-width:0"></select>
+    </div>
     <input type="text" id="logNote" placeholder="optional note (e.g. deep soak, 1 gal each)">
     <hr>
     <div id="recentLog" class="small">No entries yet.</div>
@@ -676,6 +680,9 @@
     </label>
     <label class="small" id="logEditTempLabel" style="display:none;margin-top:10px">Low temp <span id="logEditTempUnit" style="color:var(--muted)">°F</span>
       <input type="number" id="logEditTemp" step="1" placeholder="e.g. 28" style="width:100%;margin-top:3px">
+    </label>
+    <label class="small" id="logEditCausedByLabel" style="display:none;margin-top:10px">Caused by frost event
+      <select id="logEditCausedBy" style="width:100%;margin-top:3px"></select>
     </label>
     <label class="small" style="display:block;margin-top:10px">Note
       <input type="text" id="logEditNote" style="width:100%;margin-top:3px">
@@ -2105,12 +2112,57 @@ function fmtTemp(t){
   return Math.round(n) + tempUnitSymbol();
 }
 function isFrostAction(a){ return a === 'frost' || a === 'frost damage'; }
+function recentFrostEvents(){
+  // Returns frost events sorted newest first, capped to keep the dropdown short.
+  return (state.log||[])
+    .filter(e => e.action === 'frost')
+    .slice()
+    .sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
+}
+function frostEventLabel(e){
+  const date = e.date || '?';
+  const tempBit = e.temp !== undefined ? ` · ${fmtTemp(e.temp)}` : '';
+  const noteBit = e.note ? ` — ${e.note.slice(0, 40)}${e.note.length > 40 ? '…' : ''}` : '';
+  return `${date}${tempBit}${noteBit}`;
+}
+function populateCausedBySelect(selectEl, currentValue){
+  if (!selectEl) return;
+  const events = recentFrostEvents();
+  let opts = '<option value="">— not linked —</option>';
+  opts += events.map(e => `<option value="${e.id}">${escapeHtml(frostEventLabel(e))}</option>`).join('');
+  // Preserve a value pointing at an event that no longer exists (e.g. it was deleted)
+  if (currentValue && !events.some(e => e.id === currentValue)){
+    opts += `<option value="${escapeHtml(currentValue)}">(missing event)</option>`;
+  }
+  selectEl.innerHTML = opts;
+  selectEl.value = currentValue || '';
+}
 function applyTempRowVisibility(){
   const row = $('#logTempRow');
   if (!row) return;
-  row.style.display = isFrostAction($('#logAction').value) ? 'flex' : 'none';
+  const action = $('#logAction').value;
+  row.style.display = isFrostAction(action) ? 'flex' : 'none';
   const unitEl = $('#logTempUnit');
   if (unitEl) unitEl.textContent = tempUnitSymbol();
+  // Caused-by row: only for frost damage. Auto-default to most recent frost
+  // event within the last 14 days.
+  const causedByRow = $('#logCausedByRow');
+  if (!causedByRow) return;
+  if (action === 'frost damage'){
+    causedByRow.style.display = 'flex';
+    const sel = $('#logCausedBy');
+    let defaultId = '';
+    const events = recentFrostEvents();
+    if (events.length){
+      const recent = events[0];
+      const recentDate = parseYMD(recent.date);
+      const today = new Date();
+      if (recentDate && Math.abs(daysBetween(today, recentDate)) <= 14) defaultId = recent.id;
+    }
+    populateCausedBySelect(sel, sel.value || defaultId);
+  } else {
+    causedByRow.style.display = 'none';
+  }
 }
 function resetLogDateTime(){
   // Date defaults to today; time stays blank (optional). "now" button fills both.
@@ -2226,13 +2278,16 @@ $('#logBtn').onclick = ()=>{
     alert('Pick at least one plant (or a yard-wide event) before logging.');
     return;
   }
+  const causedBy = (action === 'frost damage') ? ($('#logCausedBy').value || '') : '';
   for (const t of targets){
     const entry = {id:uid(), plantId:t, action, note, date, time};
     if (temp !== undefined && !isNaN(temp)) entry.temp = temp;
+    if (causedBy) entry.causedBy = causedBy;
     state.log.push(entry);
   }
   $('#logNote').value = '';
   $('#logTemp').value = '';
+  if ($('#logCausedBy')) $('#logCausedBy').value = '';
   resetLogDateTime();
   save(); renderPlants(); renderLog(); buildBrief();
 };
@@ -2284,12 +2339,14 @@ function openLogEdit(logId){
   $('#logEditNote').value = e.note || '';
   $('#logEditTemp').value = (e.temp !== undefined && e.temp !== null) ? e.temp : '';
   $('#logEditTempUnit').textContent = tempUnitSymbol();
+  populateCausedBySelect($('#logEditCausedBy'), e.causedBy || '');
   applyLogEditTempVisibility();
   $('#logEditModal').classList.add('show');
 }
 function applyLogEditTempVisibility(){
   const v = $('#logEditAction').value;
   $('#logEditTempLabel').style.display = isFrostAction(v) ? 'block' : 'none';
+  $('#logEditCausedByLabel').style.display = (v === 'frost damage') ? 'block' : 'none';
 }
 $('#logEditAction').addEventListener('change', applyLogEditTempVisibility);
 $('#logEditClose').onclick = () => $('#logEditModal').classList.remove('show');
@@ -2311,6 +2368,13 @@ $('#logEditSave').onclick = () => {
     else { const n = parseFloat(t); if (!isNaN(n)) e.temp = n; else delete e.temp; }
   } else {
     delete e.temp;
+  }
+  if (action === 'frost damage'){
+    const cb = $('#logEditCausedBy').value;
+    if (cb) e.causedBy = cb;
+    else delete e.causedBy;
+  } else {
+    delete e.causedBy;
   }
   $('#logEditModal').classList.remove('show');
   save(); render();
@@ -3190,18 +3254,30 @@ function renderFrostLog(){
     el.innerHTML = '<div class="empty">No frost events logged yet. Use Quick log → "frost" or "frost damage" to add one.</div>';
     return;
   }
+  // Index frost events by id for quick lookup of the parent of damage entries.
+  const frostById = new Map(entries.filter(e => e.action === 'frost').map(e => [e.id, e]));
   el.innerHTML = '<table><thead><tr><th>When</th><th>Type</th><th>Low</th><th>Plant</th><th>Note</th></tr></thead><tbody>'
     + entries.map(e => {
       const p = state.plants.find(x => x.id === e.plantId);
       const pillCls = e.action === 'frost damage' ? 'pill-damage' : 'pill-frost';
       const who = p ? p.name : (e.plantId === '' ? '<em style="color:var(--muted)">Yard</em>' : '—');
       const temp = e.temp !== undefined ? fmtTemp(e.temp) : '';
+      let causedByBadge = '';
+      if (e.action === 'frost damage' && e.causedBy){
+        const parent = frostById.get(e.causedBy);
+        if (parent){
+          const ptemp = parent.temp !== undefined ? ` · ${fmtTemp(parent.temp)}` : '';
+          causedByBadge = `<div style="color:var(--muted);font-size:11px;margin-top:2px">↳ caused by ${escapeHtml(parent.date || '?')}${escapeHtml(ptemp)}</div>`;
+        } else {
+          causedByBadge = `<div style="color:var(--muted);font-size:11px;margin-top:2px">↳ caused by (missing event)</div>`;
+        }
+      }
       return `<tr class="log-row" data-log-id="${e.id}">
         <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
         <td class="action"><span class="${pillCls}">${escapeHtml(e.action)}</span></td>
         <td class="when">${temp ? escapeHtml(temp) : '<span style="color:var(--muted)">—</span>'}</td>
         <td>${who === '—' ? '—' : (p ? escapeHtml(p.name) : who)}</td>
-        <td>${escapeHtml(e.note || '')}</td>
+        <td>${escapeHtml(e.note || '')}${causedByBadge}</td>
       </tr>`;
     }).join('')
     + '</tbody></table>';
