@@ -601,7 +601,7 @@
     <h2>Collection stats</h2>
     <div class="stats-row">
       <div>
-        <div class="small" style="margin-bottom:6px;color:var(--muted)">By primary tag (living plants)</div>
+        <div class="small" style="margin-bottom:6px;color:var(--muted)">By type (living plants)</div>
         <div id="statsPie"></div>
       </div>
       <div>
@@ -3561,16 +3561,16 @@ function renderStats(){
     target.innerHTML = `<div class="stats-pie"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-label="${ariaLabel}">${paths}</svg><div class="stats-legend">${legend}</div></div>`;
   };
 
-  // Pie 1: living plants by primary tag (weighted by quantity — a row with
-  // quantity 3 contributes 3 to the slice, matching how the bar charts count).
+  // Pie 1: living plants by Type (the sheet's Type column — Tree, Shrub, etc.),
+  // weighted by quantity so a row with quantity 3 contributes 3.
   const alive = (state.plants||[]).filter(p => !p.dead && !p.wishlist);
   const qtyOf = (p) => Math.max(1, parseInt(p.quantity||1, 10) || 1);
-  const tagCounts = new Map();
+  const typeCounts = new Map();
   for (const p of alive){
-    const first = (p.tags||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)[0] || 'untagged';
-    tagCounts.set(first, (tagCounts.get(first)||0) + qtyOf(p));
+    const t = (p.category || '').trim() || 'untyped';
+    typeCounts.set(t, (typeCounts.get(t)||0) + qtyOf(p));
   }
-  drawPie(pieEl, tagCounts, 'Plants by tag', 'No plants yet.');
+  drawPie(pieEl, typeCounts, 'Plants by type', 'No plants yet.');
 
   // Pie 2: living plants by species (genus + species, derived from p.type / Latin name).
   // Strips cultivar (anything after the first single quote) and lowercases the
