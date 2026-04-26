@@ -1344,9 +1344,14 @@ async function fetchForecast(force=false){
   if (!force && !stale){ renderForecast(); return; }
   const tempUnit = s.units==='C' ? 'celsius' : 'fahrenheit';
   const precipUnit = s.units==='C' ? 'mm' : 'inch';
+  // models=best_match — for US points this routes to NOAA's NBM (National Blend
+  // of Models), matching what NWS / weather.gov publishes. More accurate than
+  // the global default for North American forecasts (especially overnight lows
+  // / frost predictions).
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}`+
     `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code`+
-    `&temperature_unit=${tempUnit}&precipitation_unit=${precipUnit}&wind_speed_unit=mph&timezone=auto&forecast_days=7`;
+    `&temperature_unit=${tempUnit}&precipitation_unit=${precipUnit}&wind_speed_unit=mph&timezone=auto&forecast_days=7`+
+    `&models=best_match`;
   try{
     const r = await fetch(url); const j = await r.json();
     state.forecast = j.daily; state.forecastFetched = Date.now(); save();
