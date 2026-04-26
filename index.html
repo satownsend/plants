@@ -276,7 +276,9 @@
   .photo-grid .ph .date{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:10px;padding:14px 6px 4px;text-align:center;font-weight:600;letter-spacing:.04em}
   .photo-grid .empty{grid-column:1/-1;color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:18px}
   .photo-timeline{margin-bottom:10px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--bg2)}
-  .photo-timeline .pt-stage{position:relative;width:100%;aspect-ratio:4/3;background:#000;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .photo-timeline .pt-stage{position:relative;width:100%;aspect-ratio:1/1;background:#000;display:flex;align-items:center;justify-content:center;cursor:pointer;max-height:70vh}
+  /* Plant info modal gets a wider frame so the timeline photo has more room */
+  #infoModal .modal{max-width:760px}
   .photo-timeline .pt-stage img{width:100%;height:100%;object-fit:contain;display:block}
   .photo-timeline .pt-counter{position:absolute;top:8px;right:10px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:3px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
   .photo-timeline .pt-controls{padding:10px 12px}
