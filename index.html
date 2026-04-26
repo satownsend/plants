@@ -584,6 +584,10 @@
         <div id="statsPie"></div>
       </div>
       <div>
+        <div class="small" style="margin-bottom:6px;color:var(--muted)">By species (living plants)</div>
+        <div id="statsSpecies"></div>
+      </div>
+      <div>
         <div class="small" style="margin-bottom:6px;color:var(--muted)">Plants acquired per year</div>
         <div id="statsBars"></div>
       </div>
@@ -3399,33 +3403,23 @@ function renderStats(){
   if (!pieEl || !barEl) return;
   const palette = ['#5c8a5e','#7aa67c','#a4c4a6','#c8d8c1','#cd8c5c','#e0a576','#8aa3b0','#a8b8be','#7e6b8f','#9d8db0','#b8a8c4','#888'];
 
-  // Pie: living plants by primary tag
-  const alive = (state.plants||[]).filter(p => !p.dead);
-  if (!alive.length){
-    pieEl.innerHTML = '<div class="stats-empty">No plants yet.</div>';
-  } else {
-    const tagCounts = new Map();
-    for (const p of alive){
-      const first = (p.tags||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)[0] || 'untagged';
-      tagCounts.set(first, (tagCounts.get(first)||0) + 1);
-    }
-    const sorted = [...tagCounts.entries()].sort((a,b)=>b[1]-a[1]);
-    const total = alive.length;
+  // Helper: render a categorical pie chart from a Map<label, count>
+  const drawPie = (target, counts, ariaLabel, emptyMsg) => {
+    if (!target) return;
+    if (!counts.size){ target.innerHTML = `<div class="stats-empty">${emptyMsg}</div>`; return; }
+    const sorted = [...counts.entries()].sort((a,b) => b[1] - a[1]);
+    const total = sorted.reduce((s, [,n]) => s + n, 0);
     const slices = []; let otherN = 0;
-    for (const [tag, n] of sorted){
+    for (const [label, n] of sorted){
       if (sorted.length > 8 && n/total < 0.03) otherN += n;
-      else slices.push([tag, n]);
+      else slices.push([label, n]);
     }
     if (otherN > 0) slices.push(['other', otherN]);
-
     const size = 180, r = 80, cx = size/2, cy = size/2;
     let angle = -Math.PI/2;
     const paths = slices.map(([_, n], i) => {
       const frac = n/total;
-      // Single-slice case: render a full circle (arc with same start/end is a no-op)
-      if (slices.length === 1){
-        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${palette[0]}" stroke="var(--panel)" stroke-width="1.5"/>`;
-      }
+      if (slices.length === 1) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${palette[0]}" stroke="var(--panel)" stroke-width="1.5"/>`;
       const a2 = angle + frac * Math.PI*2;
       const large = frac > 0.5 ? 1 : 0;
       const x1 = cx + r*Math.cos(angle), y1 = cy + r*Math.sin(angle);
@@ -3433,12 +3427,41 @@ function renderStats(){
       angle = a2;
       return `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${palette[i % palette.length]}" stroke="var(--panel)" stroke-width="1.5"/>`;
     }).join('');
-    const legend = slices.map(([tag, n], i) => {
+    const legend = slices.map(([label, n], i) => {
       const pct = Math.round(n/total*100);
-      return `<div class="lr"><span class="dot" style="background:${palette[i % palette.length]}"></span><span>${escapeHtml(tag)}</span><span class="num">${n} · ${pct}%</span></div>`;
+      return `<div class="lr"><span class="dot" style="background:${palette[i % palette.length]}"></span><span>${escapeHtml(label)}</span><span class="num">${n} · ${pct}%</span></div>`;
     }).join('');
-    pieEl.innerHTML = `<div class="stats-pie"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-label="Plants by tag">${paths}</svg><div class="stats-legend">${legend}</div></div>`;
+    target.innerHTML = `<div class="stats-pie"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-label="${ariaLabel}">${paths}</svg><div class="stats-legend">${legend}</div></div>`;
+  };
+
+  // Pie 1: living plants by primary tag
+  const alive = (state.plants||[]).filter(p => !p.dead);
+  const tagCounts = new Map();
+  for (const p of alive){
+    const first = (p.tags||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)[0] || 'untagged';
+    tagCounts.set(first, (tagCounts.get(first)||0) + 1);
   }
+  drawPie(pieEl, tagCounts, 'Plants by tag', 'No plants yet.');
+
+  // Pie 2: living plants by species (genus + species, derived from p.type / Latin name).
+  // Strips cultivar (anything after the first single quote) and lowercases the
+  // first two whitespace-separated words. Plants with no Latin name go into "unknown".
+  const speciesEl = $('#statsSpecies');
+  const speciesCounts = new Map();
+  const toSpecies = (latin) => {
+    if (!latin) return 'unknown';
+    const beforeCultivar = String(latin).split("'")[0].trim();
+    const parts = beforeCultivar.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'unknown';
+    const taken = parts.slice(0, 2).join(' ').toLowerCase();
+    // Capitalize first letter so it reads like a species name (Acer palmatum).
+    return taken.charAt(0).toUpperCase() + taken.slice(1);
+  };
+  for (const p of alive){
+    const sp = toSpecies(p.type);
+    speciesCounts.set(sp, (speciesCounts.get(sp)||0) + 1);
+  }
+  drawPie(speciesEl, speciesCounts, 'Plants by species', 'No plants yet.');
 
   // Helper: render a year-keyed bar chart into a target element
   const drawYearBars = (target, byYear, fmt, ariaLabel, emptyMsg, fill) => {
