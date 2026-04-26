@@ -936,6 +936,47 @@ if (!state.plants || !state.plants.length) state.plants = structuredClone(defaul
   }
   if (touched) saveLocal();
 })();
+// Migration: when plants are renamed (common name moved into Latin Name),
+// orphaned plantIds in logs and photo.alsoIn need remapping. We can derive
+// the original common name from the orphaned slug (p_acer-palmatum-shin-deshojo
+// → "acer palmatum shin deshojo") and match that against the new plant's
+// Latin Name. Idempotent — runs every load, no-op when nothing's orphaned.
+(function migrateRenamedPlants(){
+  const slugify = s => 'p_' + (s||'').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+  const latinSlugToId = new Map();
+  for (const p of (state.plants||[])){
+    if (p.type){
+      const latinSlug = slugify(p.type);
+      if (latinSlug !== 'p_') latinSlugToId.set(latinSlug, p.id);
+    }
+  }
+  const currentIds = new Set((state.plants||[]).map(p => p.id));
+  let logs = 0, links = 0;
+  for (const e of (state.log||[])){
+    if (!e.plantId) continue;             // yard-wide entry (plantId === '')
+    if (currentIds.has(e.plantId)) continue;
+    const newId = latinSlugToId.get(e.plantId);
+    if (newId){ e.plantId = newId; logs++; }
+  }
+  for (const p of (state.plants||[])){
+    for (const ph of (p.photos||[])){
+      if (!Array.isArray(ph.alsoIn) || !ph.alsoIn.length) continue;
+      let changed = false;
+      const next = ph.alsoIn.map(id => {
+        if (currentIds.has(id)) return id;
+        const r = latinSlugToId.get(id);
+        if (r){ changed = true; return r; }
+        return id;
+      });
+      if (changed){ ph.alsoIn = next; links++; }
+    }
+  }
+  if (logs || links){
+    saveLocal();
+    console.info(`[migration] Remapped ${logs} log entries and ${links} photo links from renamed plants.`);
+  }
+})();
 // Hardcoded location: always pin to Lilly, PA 15938
 state.settings.city = 'Lilly, PA 15938';
 state.settings.lat = 40.4238;
@@ -2854,7 +2895,19 @@ async function recoverPhotosFromR2(onStatus){
   }
 
   let restored = 0, plantsTouched = 0, orphanSlugs = [];
-  const plantBySlug = new Map((state.plants||[]).map(p => [p.id.replace(/^p_/, ''), p]));
+  // Build slug → plant lookup. Index by current id slug AND by Latin-Name-derived
+  // slug so renamed plants still match their old R2 paths.
+  const plantBySlug = new Map();
+  const latinToSlug = (s) => (s||'').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+  for (const p of (state.plants||[])){
+    const idSlug = p.id.replace(/^p_/, '');
+    plantBySlug.set(idSlug, p);
+    if (p.type){
+      const latinSlug = latinToSlug(p.type);
+      if (latinSlug && !plantBySlug.has(latinSlug)) plantBySlug.set(latinSlug, p);
+    }
+  }
   for (const [slug, keys] of slugToKeys){
     const plant = plantBySlug.get(slug);
     if (!plant){ orphanSlugs.push(slug); continue; }
@@ -2942,7 +2995,13 @@ function csvToPlants(rows, existingByName){
     const row = rows[r] || [];
     const name = (row[cName]||'').trim();
     if (!name) continue;
-    const existing = existingByName.get(name.toLowerCase()) || {};
+    const latin = cLatin>=0 ? (row[cLatin]||'').trim() : '';
+    // Match by common name first; if that fails (because the user renamed the
+    // common name and put the OLD name into Latin Name), fall back to matching
+    // by Latin Name. Preserves photos / tags / etc across renames.
+    const existing = existingByName.get(name.toLowerCase())
+      || (latin ? existingByName.get(latin.toLowerCase()) : null)
+      || {};
     let price = '';
     if (cPrice>=0 && row[cPrice]){
       const m = String(row[cPrice]).match(/[0-9]+(?:\.[0-9]{1,2})?/);
@@ -2959,7 +3018,6 @@ function csvToPlants(rows, existingByName){
     const isDead = cDead>=0
       ? /^(true|yes|1|dead|x)$/i.test((row[cDead]||'').trim())
       : !!existing.dead;
-    const latin = cLatin>=0 ? (row[cLatin]||'').trim() : '';
     const category = cType>=0 ? (row[cType]||'').trim() : '';
     plants.push({
       id: plantSlug(name),
@@ -2996,14 +3054,33 @@ async function pullFromSheet(){
     const existingByName = new Map((state.plants||[]).map(p=>[p.name.toLowerCase(), p]));
     const newPlants = csvToPlants(rows, existingByName);
     if (!newPlants.length) throw new Error('No plant rows parsed');
-    // Migrate log entries: map any old plantId to the new slug if names match
-    const oldIdToName = new Map((state.plants||[]).map(p=>[p.id, p.name.toLowerCase()]));
-    const newNameToId = new Map(newPlants.map(p=>[p.name.toLowerCase(), p.id]));
-    state.log = (state.log||[]).map(e=>{
-      const nm = oldIdToName.get(e.plantId);
-      const newId = nm && newNameToId.get(nm);
+    // Migrate log entries + photo cross-links: map any old plantId to the new
+    // slug. Match by common name first, fall back to Latin Name (for plants
+    // that were renamed and had their old common name moved into Latin Name).
+    const oldIdToName = new Map((state.plants||[]).map(p=>[p.id, (p.name||'').toLowerCase()]));
+    const newNameToId = new Map();
+    for (const p of newPlants){
+      newNameToId.set((p.name||'').toLowerCase(), p.id);
+      if (p.type) newNameToId.set(p.type.toLowerCase(), p.id);   // Latin Name fallback
+    }
+    const remap = (oldId) => {
+      const nm = oldIdToName.get(oldId);
+      return nm ? (newNameToId.get(nm) || null) : null;
+    };
+    state.log = (state.log||[]).map(e => {
+      const newId = remap(e.plantId);
       return newId ? {...e, plantId:newId} : e;
     });
+    // Also remap photo cross-links (photo.alsoIn[]) on the existing plants —
+    // do this BEFORE we replace state.plants so the carry-over plants keep
+    // their links pointing at the new ids.
+    for (const p of (state.plants||[])){
+      for (const ph of (p.photos||[])){
+        if (Array.isArray(ph.alsoIn) && ph.alsoIn.length){
+          ph.alsoIn = ph.alsoIn.map(id => remap(id) || id);
+        }
+      }
+    }
     state.plants = newPlants;
     state.settings.sheetLastPull = new Date().toISOString();
     save();   // triggers GitHub push too
