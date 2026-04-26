@@ -219,6 +219,7 @@
   .log-plant-pop .lpp-done{align-self:flex-end}
   .log-plant-pop.is-yard .lpp-list{opacity:.45;pointer-events:none}
   #plantTable.hide-qty [data-col="qty"],
+  #plantTable.hide-photos [data-col="photos"],
   #plantTable.hide-category [data-col="category"],
   #plantTable.hide-type [data-col="type"],
   #plantTable.hide-location [data-col="location"],
@@ -537,9 +538,10 @@
         <thead><tr>
           <th data-sort="name" data-col="name">Name</th>
           <th data-sort="type" data-col="type">Latin name</th>
-          <th data-sort="qty" data-col="qty">Qty</th>
           <th data-sort="category" data-col="category">Type</th>
           <th data-sort="location" data-col="location">Location</th>
+          <th data-sort="qty" data-col="qty">Qty</th>
+          <th data-sort="photos" data-col="photos">Photos</th>
           <th data-sort="planted" data-col="planted">Planted</th>
           <th data-sort="price" data-col="price">Price</th>
           <th data-sort="watered" data-col="watered">Last watered</th>
@@ -762,7 +764,7 @@
 </div>
 
 <template id="plantEditTpl">
-  <tr class="edit-row"><td colspan="11">
+  <tr class="edit-row"><td colspan="12">
     <div class="grid3">
       <div>
         <label class="small">Common name</label>
@@ -1575,6 +1577,7 @@ const sortFns = {
   location:(a,b) => (a.spot||'').localeCompare(b.spot||''),
   planted: (a,b) => (a.purchased||'9999-99-99').localeCompare(b.purchased||'9999-99-99'),
   price:   (a,b) => (Number(a.price)||0) - (Number(b.price)||0),
+  photos:  (a,b) => getPhotosForPlant(a).length - getPhotosForPlant(b).length,
   watered: (a,b) => {
     const la = lastLogFor(a.id,'watered'), lb = lastLogFor(b.id,'watered');
     return (la?la.date:'0').localeCompare(lb?lb.date:'0');
@@ -1585,8 +1588,8 @@ const sortFns = {
   },
   notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
 };
-const COL_KEYS = ['type','qty','category','location','planted','price','watered','fed','notes'];
-const COL_LABELS = {qty:'Qty', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
+const COL_KEYS = ['type','category','location','qty','photos','planted','price','watered','fed','notes'];
+const COL_LABELS = {qty:'Qty', photos:'Photos', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
 const COL_VIS_KEY = 'yardDashboard.colVisibility';
 function loadColVis(){
   try {
@@ -1655,13 +1658,16 @@ function renderPlants(){
     const cellWatered = lastW ? `${daysSince(lastW.date)}d ago` : '';
     const cellFed = lastF ? `${daysSince(lastF.date)}d ago` : '';
     const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
+    const photoCount = getPhotosForPlant(p).length;
+    const cellPhotos = photoCount ? String(photoCount) : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
       <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
-      <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
+      <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
+      <td data-col="photos" data-label="Photos" class="${empty(cellPhotos)}">${cellPhotos || '<span class="meta">—</span>'}</td>
       <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
       <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
       <td data-col="watered" data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
