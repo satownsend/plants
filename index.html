@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://use.typekit.net" crossorigin>
 <link rel="stylesheet" href="https://use.typekit.net/twp1irx.css">
 <style>
+  /* Default = Teal Dark (the original) */
   :root{
     --bg:#08191c;            /* deep teal, near-black */
     --bg2:#0d2629;           /* lifted panels behind */
@@ -28,8 +29,11 @@
     --cool:#7ec4cc;
     --chip:#163a3f;
     --chip-line:#2a5159;
+    --gradient-1:#163b41;    /* top-right radial origin */
+    --gradient-2:#0c2528;    /* bottom-left radial origin */
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
   }
+  /* Cream Light — kept as the existing light option */
   [data-theme="light"]{
     --bg:#e6f1f2;
     --bg2:#f3f9fa;
@@ -47,13 +51,103 @@
     --cool:#2c6e7a;
     --chip:#deeef0;
     --chip-line:#c2d6d9;
+    --gradient-1:#e7dfc6;
+    --gradient-2:#ece5d0;
     --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 22px rgba(0,0,0,.08);
+  }
+  /* Dawn Redwood — warm browns + rust accent + gold contrast */
+  [data-theme="redwood"]{
+    --bg:#1c1410;
+    --bg2:#251c15;
+    --panel:#2a2018;
+    --panel2:#34291f;
+    --ink:#f0e2cc;
+    --ink-soft:#d2bb9b;
+    --muted:#9b8770;
+    --line:#3a2c20;
+    --line2:#4d3b2c;
+    --accent:#d97a4a;        /* dawn redwood rust */
+    --accent-deep:#a85522;
+    --accent2:#f5c97a;       /* feathery foliage gold */
+    --warn:#e08a4a;
+    --cool:#bd8d6a;
+    --chip:#34291f;
+    --chip-line:#4d3b2c;
+    --gradient-1:#3a2718;
+    --gradient-2:#1f140d;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
+  }
+  /* Slate — neutral cool grey, restrained accent */
+  [data-theme="slate"]{
+    --bg:#13171b;
+    --bg2:#1a1f24;
+    --panel:#1f242a;
+    --panel2:#272d34;
+    --ink:#e6eaef;
+    --ink-soft:#bcc3cb;
+    --muted:#838c96;
+    --line:#2c333b;
+    --line2:#3a424c;
+    --accent:#9aafc4;        /* cool grey-blue */
+    --accent-deep:#6f8499;
+    --accent2:#d4a574;       /* warm contrast */
+    --warn:#d49060;
+    --cool:#9aafc4;
+    --chip:#272d34;
+    --chip-line:#3a424c;
+    --gradient-1:#2c3741;
+    --gradient-2:#13191f;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
+  }
+  /* Maple — deep burgundy bg + Bloodgood red accent */
+  [data-theme="maple"]{
+    --bg:#16080a;
+    --bg2:#1f0e10;
+    --panel:#251218;
+    --panel2:#321a22;
+    --ink:#f0dcdf;
+    --ink-soft:#d4b6bd;
+    --muted:#998087;
+    --line:#3a1f28;
+    --line2:#4a2c34;
+    --accent:#d2554a;        /* Bloodgood red */
+    --accent-deep:#993028;
+    --accent2:#f0a84a;       /* autumn gold */
+    --warn:#f0a84a;
+    --cool:#b08090;
+    --chip:#321a22;
+    --chip-line:#4a2c34;
+    --gradient-1:#3a1822;
+    --gradient-2:#1a0a0d;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
+  }
+  /* Forest — original pre-teal green */
+  [data-theme="forest"]{
+    --bg:#0d1611;
+    --bg2:#11201a;
+    --panel:#16241d;
+    --panel2:#1c2e25;
+    --ink:#e8e4d3;
+    --ink-soft:#cdc8b3;
+    --muted:#8a9483;
+    --line:#243730;
+    --line2:#2e463c;
+    --accent:#8fc06a;        /* fresh leaf */
+    --accent-deep:#5d8a3e;
+    --accent2:#d49858;
+    --warn:#e08a4a;
+    --cool:#7ec0c4;
+    --chip:#1f3128;
+    --chip-line:#2c4438;
+    --gradient-1:#1a3025;
+    --gradient-2:#0f231b;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 36px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;
     background:
-      radial-gradient(1200px 600px at 80% -10%, #163b41 0%, transparent 60%),
-      radial-gradient(900px 500px at 0% 100%, #0c2528 0%, transparent 55%),
+      radial-gradient(1200px 600px at 80% -10%, var(--gradient-1) 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, var(--gradient-2) 0%, transparent 55%),
       var(--bg);
     background-attachment:fixed;
     color:var(--ink);
@@ -222,6 +316,15 @@
     padding:10px 12px;box-shadow:var(--shadow);z-index:5;min-width:180px}
   .cols-pop label{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--ink);font-size:13px;cursor:pointer}
   .cols-pop label input[type=checkbox]{margin:0}
+  .theme-pop{position:absolute;top:calc(100% + 6px);right:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px;box-shadow:var(--shadow);z-index:6;min-width:200px;display:flex;flex-direction:column;gap:4px}
+  .theme-pop .tp-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--ink);font-size:13px}
+  .theme-pop .tp-row:hover{background:var(--panel2)}
+  .theme-pop .tp-row.is-current{background:var(--chip)}
+  .theme-pop .tp-swatch{display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--line2);width:46px;height:18px;flex:none}
+  .theme-pop .tp-swatch span{flex:1;display:block}
+  .theme-pop .tp-name{flex:1}
+  .theme-pop .tp-check{color:var(--accent);font-size:14px;line-height:1;width:14px;text-align:center}
   .log-plant-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;
     padding:10px;box-shadow:var(--shadow);z-index:6;max-height:340px;display:flex;flex-direction:column;gap:8px}
   .log-plant-pop input.lpp-search{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:13px;width:100%}
@@ -406,12 +509,6 @@
     h1{font-size:18px}
   }
   /* Light-mode overrides for elements with non-variable colors */
-  [data-theme="light"] body{
-    background:
-      radial-gradient(1200px 600px at 80% -10%, #e7dfc6 0%, transparent 60%),
-      radial-gradient(900px 500px at 0% 100%, #ece5d0 0%, transparent 55%),
-      var(--bg);
-  }
   [data-theme="light"] button:not(.ghost){color:#fff}
   [data-theme="light"] button:not(.ghost):hover{background:var(--accent-deep)}
   [data-theme="light"] button.ghost{color:var(--ink);border-color:var(--line2)}
@@ -457,7 +554,10 @@
     <span class="chip" id="frostchip">❄ frost dates</span>
     <span class="chip" id="syncchip" title="Click to configure">⟳ sync: off</span>
     <span class="chip" id="gallerychip" title="Toggle photo gallery" style="cursor:pointer">🖼 gallery</span>
-    <span class="chip" id="themechip" title="Toggle theme" style="cursor:pointer">◐ light</span>
+    <span style="position:relative">
+      <span class="chip" id="themechip" title="Pick theme" style="cursor:pointer">◐ theme</span>
+      <div id="themePop" class="theme-pop" role="dialog" aria-label="Pick theme" style="display:none"></div>
+    </span>
     <button class="ghost tiny" id="settingsBtn">Settings</button>
   </div>
 </header>
@@ -1113,20 +1213,60 @@ function plantedDuration(dateStr){
 
 /* ---------- theme ---------- */
 const THEME_KEY = 'yardDashboard.theme';
-function applyTheme(t){
-  document.documentElement.setAttribute('data-theme', t);
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', t === 'light' ? '#f3eddc' : '#0d1611');
-  const chip = $('#themechip');
-  if (chip) chip.textContent = t === 'light' ? '◐ dark' : '◐ light';
+// label / data-theme value / accent / bg pair shown in the swatch
+const THEMES = [
+  { id:'dark',    label:'Teal Dark',     bg:'#08191c', accent:'#4dd0c1', meta:'#0d2629' },
+  { id:'light',   label:'Cream Light',   bg:'#e6f1f2', accent:'#118a7d', meta:'#f3f9fa' },
+  { id:'redwood', label:'Dawn Redwood',  bg:'#1c1410', accent:'#d97a4a', meta:'#251c15' },
+  { id:'maple',   label:'Bloodgood Maple', bg:'#16080a', accent:'#d2554a', meta:'#1f0e10' },
+  { id:'forest',  label:'Forest',        bg:'#0d1611', accent:'#8fc06a', meta:'#11201a' },
+  { id:'slate',   label:'Slate Grey',    bg:'#13171b', accent:'#9aafc4', meta:'#1a1f24' },
+];
+function getThemeId(){
+  const stored = localStorage.getItem(THEME_KEY) || 'dark';
+  return THEMES.some(t => t.id === stored) ? stored : 'dark';
 }
-applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
-$('#themechip').onclick = ()=>{
-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = cur === 'light' ? 'dark' : 'light';
-  localStorage.setItem(THEME_KEY, next);
-  applyTheme(next);
-};
+function applyTheme(id){
+  if (!THEMES.some(t => t.id === id)) id = 'dark';
+  document.documentElement.setAttribute('data-theme', id);
+  const t = THEMES.find(x => x.id === id);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && t) meta.setAttribute('content', t.meta);
+}
+function buildThemePop(){
+  const pop = $('#themePop');
+  const cur = getThemeId();
+  pop.innerHTML = THEMES.map(t => `
+    <div class="tp-row ${t.id === cur ? 'is-current' : ''}" data-theme-id="${t.id}">
+      <span class="tp-swatch"><span style="background:${t.bg}"></span><span style="background:${t.accent}"></span></span>
+      <span class="tp-name">${t.label}</span>
+      <span class="tp-check">${t.id === cur ? '✓' : ''}</span>
+    </div>
+  `).join('');
+}
+function toggleThemePop(force){
+  const pop = $('#themePop');
+  const open = force === undefined ? pop.style.display === 'none' || !pop.style.display : !!force;
+  if (open){ buildThemePop(); pop.style.display = 'flex'; }
+  else { pop.style.display = 'none'; }
+}
+applyTheme(getThemeId());
+$('#themechip').onclick = (e) => { e.stopPropagation(); toggleThemePop(); };
+$('#themePop').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const row = e.target.closest('[data-theme-id]');
+  if (!row) return;
+  const id = row.dataset.themeId;
+  localStorage.setItem(THEME_KEY, id);
+  applyTheme(id);
+  buildThemePop();   // refresh checkmark
+});
+document.addEventListener('click', (e) => {
+  const pop = $('#themePop');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && e.target.id !== 'themechip'){
+    toggleThemePop(false);
+  }
+});
 
 /* ---------- photo gallery ---------- */
 const GALLERY_KEY = 'yardDashboard.galleryOn';
