@@ -955,27 +955,61 @@ if (!state.plants || !state.plants.length) state.plants = structuredClone(defaul
   }
   if (touched) saveLocal();
 })();
-// Migration: when plants are renamed (common name moved into Latin Name),
-// orphaned plantIds in logs and photo.alsoIn need remapping. We can derive
-// the original common name from the orphaned slug (p_acer-palmatum-shin-deshojo
-// → "acer palmatum shin deshojo") and match that against the new plant's
-// Latin Name. Idempotent — runs every load, no-op when nothing's orphaned.
-(function migrateRenamedPlants(){
-  const slugify = s => 'p_' + (s||'').toLowerCase().trim()
+// Migration: when plants are renamed, orphaned plantIds in logs and
+// photo.alsoIn need remapping to the renamed plant. Three matching strategies,
+// in order of confidence:
+//   1. New plant's Latin Name slug == orphan slug (old common name moved to Latin Name).
+//   2. Orphan's word-set is a near-subset of a current plant's name word-set
+//      (e.g. "weeping-alaskan-cedar" → "Blue Weeping Alaskan Cedar").
+// Idempotent — runs every load, no-op when nothing's orphaned.
+function slugifyName(s){
+  return 'p_' + (s||'').toLowerCase().trim()
     .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+}
+function fuzzyMatchOrphanSlug(orphanSlug, candidatePlants){
+  // Extract significant words from the orphan slug (skip very short tokens).
+  const orphanWords = String(orphanSlug).replace(/^p_/, '').split('-')
+    .filter(w => w.length >= 3);
+  if (orphanWords.length < 2) return null;
+  let bestMatch = null, bestScore = 0;
+  for (const p of candidatePlants){
+    const plantWords = (p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+    if (plantWords.length === 0) continue;
+    const plantSet = new Set(plantWords);
+    const overlap = orphanWords.filter(w => plantSet.has(w)).length;
+    if (overlap < 2) continue;
+    // Need ≥75% of the SHORTER side's words to overlap. Symmetric so the matcher
+    // works in both directions: orphan-shorter → candidate-longer (rename added
+    // a word) and orphan-longer → candidate-shorter (rename removed a word).
+    // The 75% threshold prevents false matches (e.g. "Acer palmatum X" wouldn't
+    // match a different "Acer palmatum Y" — they share only 2 of 3 ≈ 67%).
+    const minLen = Math.min(orphanWords.length, plantWords.length);
+    const ratio = overlap / minLen;
+    if (ratio >= 0.75 && overlap > bestScore){
+      bestScore = overlap;
+      bestMatch = p;
+    }
+  }
+  return bestMatch ? bestMatch.id : null;
+}
+(function migrateRenamedPlants(){
   const latinSlugToId = new Map();
   for (const p of (state.plants||[])){
     if (p.type){
-      const latinSlug = slugify(p.type);
+      const latinSlug = slugifyName(p.type);
       if (latinSlug !== 'p_') latinSlugToId.set(latinSlug, p.id);
     }
   }
   const currentIds = new Set((state.plants||[]).map(p => p.id));
+  const remap = (orphanId) => {
+    if (!orphanId || currentIds.has(orphanId)) return null;
+    return latinSlugToId.get(orphanId)
+      || fuzzyMatchOrphanSlug(orphanId, state.plants||[]);
+  };
   let logs = 0, links = 0;
   for (const e of (state.log||[])){
     if (!e.plantId) continue;             // yard-wide entry (plantId === '')
-    if (currentIds.has(e.plantId)) continue;
-    const newId = latinSlugToId.get(e.plantId);
+    const newId = remap(e.plantId);
     if (newId){ e.plantId = newId; logs++; }
   }
   for (const p of (state.plants||[])){
@@ -983,8 +1017,7 @@ if (!state.plants || !state.plants.length) state.plants = structuredClone(defaul
       if (!Array.isArray(ph.alsoIn) || !ph.alsoIn.length) continue;
       let changed = false;
       const next = ph.alsoIn.map(id => {
-        if (currentIds.has(id)) return id;
-        const r = latinSlugToId.get(id);
+        const r = remap(id);
         if (r){ changed = true; return r; }
         return id;
       });
@@ -2936,7 +2969,14 @@ async function recoverPhotosFromR2(onStatus){
     }
   }
   for (const [slug, keys] of slugToKeys){
-    const plant = plantBySlug.get(slug);
+    let plant = plantBySlug.get(slug);
+    if (!plant){
+      // Fuzzy fallback — handles renames where the new common name still
+      // shares ≥75% of words with the old (e.g. "weeping-alaskan-cedar" →
+      // "Blue Weeping Alaskan Cedar").
+      const matchedId = fuzzyMatchOrphanSlug('p_' + slug, state.plants||[]);
+      if (matchedId) plant = (state.plants||[]).find(p => p.id === matchedId);
+    }
     if (!plant){ orphanSlugs.push(slug); continue; }
     const existingKeys = new Set((plant.photos||[]).map(ph => ph.key));
     const additions = [];
@@ -3023,12 +3063,19 @@ function csvToPlants(rows, existingByName){
     const name = (row[cName]||'').trim();
     if (!name) continue;
     const latin = cLatin>=0 ? (row[cLatin]||'').trim() : '';
-    // Match by common name first; if that fails (because the user renamed the
-    // common name and put the OLD name into Latin Name), fall back to matching
-    // by Latin Name. Preserves photos / tags / etc across renames.
-    const existing = existingByName.get(name.toLowerCase())
-      || (latin ? existingByName.get(latin.toLowerCase()) : null)
-      || {};
+    // Match by common name first; if that fails, try Latin Name (handles the
+    // "moved old common name into Latin Name" pattern); finally fall back to
+    // fuzzy word-overlap match against existing common names (handles renames
+    // like "Weeping Alaskan Cedar" → "Blue Weeping Alaskan Cedar" where the
+    // old name is preserved as a substring of the new).
+    let existing = existingByName.get(name.toLowerCase())
+      || (latin ? existingByName.get(latin.toLowerCase()) : null);
+    if (!existing){
+      const existingPlants = [...existingByName.values()];
+      const fuzzyId = fuzzyMatchOrphanSlug(plantSlug(name), existingPlants);
+      if (fuzzyId) existing = existingPlants.find(p => p.id === fuzzyId) || null;
+    }
+    existing = existing || {};
     let price = '';
     if (cPrice>=0 && row[cPrice]){
       const m = String(row[cPrice]).match(/[0-9]+(?:\.[0-9]{1,2})?/);
