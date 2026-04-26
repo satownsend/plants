@@ -351,6 +351,8 @@
     /* Hide cells with no value to reduce noise */
     #plantTable td.is-empty,
     #plantTable td.is-empty-mobile{display:none}
+    /* Mobile: only show name + edit button — collapse the rest into the tap-to-open card */
+    #plantTable td[data-col]:not([data-col="name"]):not([data-col="edit"]){display:none}
     /* Edit button: top-right of card */
     #plantTable td:last-child{
       position:absolute;top:10px;right:10px;padding:0;
@@ -434,7 +436,9 @@
   </div>
 </header>
 
-<div class="gallery" id="galleryPanel" style="display:none">
+<div class="grid" style="margin-top:16px">
+
+<div class="gallery" id="galleryPanel" style="display:none;grid-column:1/-1">
   <div class="gallery-stage" id="galleryStage">
     <img class="gallery-img is-current" id="galleryImgA" alt="">
     <img class="gallery-img" id="galleryImgB" alt="">
@@ -470,8 +474,6 @@
   <p class="topline" id="topline">Loading…</p>
   <div class="tasks"><ul id="taskList"></ul></div>
 </div>
-
-<div class="grid" style="margin-top:16px">
 
   <div class="panel">
     <h2>Forecast</h2>
