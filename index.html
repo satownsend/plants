@@ -1793,6 +1793,12 @@ function renderPlants(){
     const cellPlanted = p.purchased ? plantedDuration(p.purchased) : '';
     const priceFormatted = fmtPrice(p.price);
     const cellPrice = priceFormatted ? escapeHtml(priceFormatted) : '';
+    // Tooltip with the qty × price total when there are multiples — sheet's
+    // Price column is unit price; total is qty * unit (used in spend chart too).
+    const priceNum = Number(p.price);
+    const priceTitle = (priceNum && qty > 1)
+      ? ` title="${escapeHtml(`${qty} × ${fmtPrice(priceNum)} = ${fmtPrice(priceNum * qty)} total`)}"`
+      : '';
     const cellWatered = lastW ? `${daysSince(lastW.date)}d ago` : '';
     const cellFed = lastF ? `${daysSince(lastF.date)}d ago` : '';
     const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
@@ -1807,7 +1813,7 @@ function renderPlants(){
       <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-col="photos" data-label="Photos" class="${empty(cellPhotos)}">${cellPhotos || '<span class="meta">—</span>'}</td>
       <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
-      <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
+      <td data-col="price" data-label="Price" class="${empty(cellPrice)}"${priceTitle}>${cellPrice||'<span class="meta">—</span>'}</td>
       <td data-col="watered" data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
       <td data-col="fed" data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
       <td data-col="notes" data-label="Notes" class="${empty(cellNotes)}">${cellNotes||'<span class="meta">—</span>'}</td>
@@ -3675,11 +3681,16 @@ function renderWishlist(){
   $('#wishlistTable').innerHTML = '<table><thead><tr><th>Name</th><th>Latin name</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>'
     + items.map(p => {
       const priceStr = fmtPrice(p.price);
+      const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
+      const priceNum = Number(p.price);
+      const priceTitle = (priceNum && qty > 1)
+        ? ` title="${escapeHtml(`${qty} × ${fmtPrice(priceNum)} = ${fmtPrice(priceNum * qty)} total`)}"`
+        : '';
       return `<tr class="wishlist-row" data-info="${p.id}" style="cursor:pointer">
         <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a></td>
         <td><span class="meta">${escapeHtml(p.type || '—')}</span></td>
         <td>${escapeHtml(p.category || '—')}</td>
-        <td class="price">${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
+        <td class="price"${priceTitle}>${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
         <td><span class="meta">${escapeHtml(p.notes || '')}</span></td>
       </tr>`;
     }).join('')
