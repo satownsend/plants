@@ -116,6 +116,8 @@
   .stats-pie svg:hover .pie-slice{opacity:.55}
   .stats-pie svg .pie-slice:hover{opacity:1;stroke-width:2.5}
   .stats-empty{color:var(--muted);font-size:13px;padding:20px 0}
+  .stats-total{margin-top:6px;padding-top:6px;border-top:1px solid var(--line2);font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;text-align:right}
+  .stats-total:empty{display:none}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
   .panel.full{grid-column:1/-1}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -608,10 +610,12 @@
       <div>
         <div class="small" style="margin-bottom:6px;color:var(--muted)">Plants acquired per year</div>
         <div id="statsBars"></div>
+        <div id="statsBarsTotal" class="stats-total"></div>
       </div>
       <div>
         <div class="small" style="margin-bottom:6px;color:var(--muted)">Money spent per year</div>
         <div id="statsSpend"></div>
+        <div id="statsSpendTotal" class="stats-total"></div>
       </div>
     </div>
   </div>
@@ -3620,8 +3624,29 @@ function renderStats(){
   drawYearBars('#statsBars', acquired, n => String(n), 'Plants acquired per year',
     'No purchase dates recorded.', 'var(--accent)');
   const fmtMoney = n => n >= 1000 ? '$'+Math.round(n/100)/10+'k' : '$'+Math.round(n);
+  // Pretty-format whole dollars with commas for the grand-total line
+  const fmtMoneyFull = n => '$' + Math.round(n).toLocaleString();
   drawYearBars('#statsSpend', spent, fmtMoney, 'Money spent per year',
     'No prices recorded in notes.', 'var(--accent2)');
+
+  // Grand totals beneath the per-year bar charts.
+  const acquiredTotal = [...acquired.values()].reduce((s,n) => s+n, 0);
+  const spentTotal    = [...spent.values()].reduce((s,n) => s+n, 0);
+  const yearsSpan     = (acquired.size + spent.size) > 0
+    ? Math.max(1, (new Date().getFullYear() - Math.min(...acquired.keys(), ...spent.keys()) + 1))
+    : 0;
+  const acqSummary = $('#statsBarsTotal');
+  if (acqSummary){
+    acqSummary.textContent = acquiredTotal
+      ? `Total: ${acquiredTotal} plant${acquiredTotal===1?'':'s'} · avg ${(acquiredTotal/yearsSpan).toFixed(1)}/yr`
+      : '';
+  }
+  const spendSummary = $('#statsSpendTotal');
+  if (spendSummary){
+    spendSummary.textContent = spentTotal
+      ? `Total: ${fmtMoneyFull(spentTotal)} · avg ${fmtMoneyFull(spentTotal/yearsSpan)}/yr`
+      : '';
+  }
 }
 
 function renderFrostLog(){
