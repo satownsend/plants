@@ -539,6 +539,32 @@
   @supports (padding:max(0px)){
     .wrap{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
   }
+  /* ---------- Print inventory ---------- */
+  #printSheet{display:none}
+  @media print{
+    @page { margin: 0.5in; size: letter; }
+    body { background: #fff !important; color: #000; }
+    .wrap, header, .modal-back, .gallery, #briefPanel, #wishlistPanel,
+    #frostPanel, #statsPanel, #plantTable + .row, .filter-row,
+    #settingsPanel, .photo-grid, #infoTimeline, .panel:not(.print-keep) { display: none !important; }
+    #printSheet{display:block;color:#000;font:12pt/1.4 "Helvetica Neue", Arial, sans-serif}
+    #printSheet h1{font:700 24pt/1.1 serif;margin:0 0 4pt;color:#000}
+    #printSheet .ps-sub{font-size:11pt;color:#444;margin:0 0 16pt}
+    #printSheet .ps-summary{margin:0 0 18pt;padding:8pt 0;border-top:1pt solid #000;border-bottom:1pt solid #ccc;display:flex;gap:24pt;flex-wrap:wrap;font-size:10pt}
+    #printSheet .ps-summary div{display:flex;flex-direction:column;gap:2pt}
+    #printSheet .ps-summary .lbl{font-size:8pt;text-transform:uppercase;letter-spacing:.06em;color:#555}
+    #printSheet .ps-summary .val{font-size:14pt;font-weight:700}
+    #printSheet table{width:100%;border-collapse:collapse;font-size:9pt}
+    #printSheet th{text-align:left;padding:6pt 4pt;border-bottom:1pt solid #000;font-size:8pt;text-transform:uppercase;letter-spacing:.04em;color:#000;font-weight:700}
+    #printSheet td{padding:5pt 4pt;border-bottom:.5pt solid #ccc;vertical-align:top;page-break-inside:avoid}
+    #printSheet tr{page-break-inside:avoid}
+    #printSheet td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+    #printSheet td.muted{color:#888}
+    #printSheet td.name{font-weight:600}
+    #printSheet td.latin{font-style:italic;color:#555}
+    #printSheet .ps-section{margin-top:24pt;font-size:14pt;font-weight:700;border-bottom:1pt solid #000;padding-bottom:4pt}
+    #printSheet .ps-footer{margin-top:18pt;padding-top:6pt;border-top:.5pt solid #ccc;font-size:8pt;color:#888;text-align:center}
+  }
 </style>
 </head>
 <body>
@@ -792,6 +818,7 @@
     <button id="loadInventoryBtn" class="ghost">Load "Our Trees" inventory</button>
     <button id="exportBtn" class="ghost">Export data</button>
     <button id="importBtn" class="ghost">Import</button>
+    <button id="printInventoryBtn" class="ghost">Print inventory</button>
     <input type="file" id="importFile" accept="application/json" style="display:none">
     <button id="resetBtn" class="ghost" style="margin-left:auto">Reset all</button>
   </div>
@@ -1570,6 +1597,86 @@ $('#exportBtn').onclick = ()=>{
   a.href = URL.createObjectURL(blob);
   a.download = `yard-backup-${ymd(today)}.json`;
   a.click();
+};
+
+// Print-ready inventory (issue #53). Builds a clean printable section,
+// hides the screen UI via @media print, then triggers the browser's
+// print dialog. User can save as PDF from there.
+function buildPrintInventory(){
+  const all = (state.plants||[]);
+  const inventory = all.filter(p => !p.wishlist);
+  const wishlist = all.filter(p => p.wishlist);
+  const living = inventory.filter(p => !p.dead);
+  const departed = inventory.filter(p => p.dead);
+  // Species count uses the same extractor as the species pie
+  const speciesSet = new Set();
+  for (const p of inventory){
+    const beforeCultivar = String(p.type||'').split("'")[0].trim();
+    const taken = beforeCultivar.split(/\s+/).filter(Boolean).slice(0,2).join(' ').toLowerCase();
+    if (taken) speciesSet.add(taken);
+  }
+  // Total spent = sum(price × qty) over all (incl. dead — historical cost basis)
+  let totalSpent = 0;
+  for (const p of inventory){
+    const price = Number(p.price)||0;
+    const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
+    totalSpent += price * qty;
+  }
+  const fmtMoney = n => '$' + Math.round(n).toLocaleString();
+  const fmtDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'}) : '';
+  const today = new Date();
+  const todayStr = today.toLocaleDateString(undefined, {year:'numeric', month:'long', day:'numeric'});
+
+  const renderRows = (rows) => rows.slice().sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => {
+    const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
+    const price = Number(p.price)||0;
+    const total = price * qty;
+    const planted = p.purchased ? plantedDuration(p.purchased) : '';
+    return `<tr>
+      <td class="name">${escapeHtml(p.name||'')}</td>
+      <td class="latin">${escapeHtml(p.type||'')}</td>
+      <td>${escapeHtml(p.category||'')}</td>
+      <td>${escapeHtml(p.spot||'')}</td>
+      <td class="num">${qty}</td>
+      <td class="num">${p.purchased ? escapeHtml(fmtDate(p.purchased)) : '<span class="muted">—</span>'}</td>
+      <td class="num">${planted ? escapeHtml(planted) : '<span class="muted">—</span>'}</td>
+      <td class="num">${price ? escapeHtml(fmtMoney(price)) : '<span class="muted">—</span>'}</td>
+      <td class="num">${total ? escapeHtml(fmtMoney(total)) : '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const tableHeader = `<thead><tr>
+    <th>Name</th><th>Latin name</th><th>Type</th><th>Location</th>
+    <th class="num">Qty</th><th class="num">Purchased</th><th class="num">Age</th>
+    <th class="num">Unit \$</th><th class="num">Total \$</th>
+  </tr></thead>`;
+
+  let html = `
+    <h1>Our Plants — Inventory</h1>
+    <p class="ps-sub">${escapeHtml((state.settings||{}).city || '')} · Generated ${escapeHtml(todayStr)}</p>
+    <div class="ps-summary">
+      <div><span class="lbl">Total plants</span><span class="val">${inventory.reduce((s,p)=>s+(Math.max(1, parseInt(p.quantity||1,10)||1)),0)}</span></div>
+      <div><span class="lbl">Living</span><span class="val">${living.length}</span></div>
+      <div><span class="lbl">Departed</span><span class="val">${departed.length}</span></div>
+      <div><span class="lbl">Species</span><span class="val">${speciesSet.size}</span></div>
+      <div><span class="lbl">Total invested</span><span class="val">${fmtMoney(totalSpent)}</span></div>
+    </div>
+    <div class="ps-section">Living plants</div>
+    <table>${tableHeader}<tbody>${renderRows(living)}</tbody></table>
+  `;
+  if (departed.length){
+    html += `<div class="ps-section">Departed (RIP)</div><table>${tableHeader}<tbody>${renderRows(departed)}</tbody></table>`;
+  }
+  if (wishlist.length){
+    html += `<div class="ps-section">Wishlist</div><table>${tableHeader}<tbody>${renderRows(wishlist)}</tbody></table>`;
+  }
+  html += `<div class="ps-footer">Generated by the Plants dashboard · ${escapeHtml(todayStr)}</div>`;
+  $('#printSheet').innerHTML = html;
+}
+$('#printInventoryBtn').onclick = () => {
+  buildPrintInventory();
+  // Slight delay so the browser can layout the section before opening dialog.
+  setTimeout(() => window.print(), 100);
 };
 $('#importBtn').onclick = ()=> $('#importFile').click();
 $('#importFile').onchange = (ev)=>{
@@ -3898,5 +4005,9 @@ refreshR2Input();
   }
 })();
 </script>
+
+<!-- Print-only inventory sheet. Hidden in normal viewing; revealed when
+     the user clicks "Print inventory" or hits Ctrl/Cmd-P after enabling. -->
+<section id="printSheet" aria-hidden="true"></section>
 </body>
 </html>
