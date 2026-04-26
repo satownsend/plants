@@ -112,6 +112,9 @@
   .stats-legend .dot{width:10px;height:10px;border-radius:2px}
   .stats-legend .num{color:var(--muted);font-variant-numeric:tabular-nums}
   .stats-pie{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .stats-pie svg .pie-slice{cursor:default;transition:opacity .15s ease, stroke-width .15s ease}
+  .stats-pie svg:hover .pie-slice{opacity:.55}
+  .stats-pie svg .pie-slice:hover{opacity:1;stroke-width:2.5}
   .stats-empty{color:var(--muted);font-size:13px;padding:20px 0}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
   .panel.full{grid-column:1/-1}
@@ -3401,7 +3404,24 @@ $('#r2RecoverBtn').onclick = async ()=>{
 function renderStats(){
   const pieEl = $('#statsPie'), barEl = $('#statsBars');
   if (!pieEl || !barEl) return;
-  const palette = ['#5c8a5e','#7aa67c','#a4c4a6','#c8d8c1','#cd8c5c','#e0a576','#8aa3b0','#a8b8be','#7e6b8f','#9d8db0','#b8a8c4','#888'];
+  // Categorical palette tuned for distinguishability across the dashboard's
+  // dark + light themes. Based on Tableau 10 (well-tested for non-similarity)
+  // with the first slot swapped to the dashboard's teal accent so the most
+  // common slice ties into the brand.
+  const palette = [
+    '#4dd0c1', // teal (matches --accent)
+    '#f28e2c', // orange
+    '#e15759', // coral red
+    '#9c89e0', // lavender
+    '#59a14f', // green
+    '#edc949', // amber
+    '#76b7b2', // muted teal
+    '#ff9da7', // pink
+    '#9c755f', // taupe
+    '#7ec0c4', // sky cyan
+    '#bab0ab', // slate
+    '#b07aa1', // plum
+  ];
 
   // Helper: render a categorical pie chart from a Map<label, count>
   const drawPie = (target, counts, ariaLabel, emptyMsg) => {
@@ -3417,15 +3437,17 @@ function renderStats(){
     if (otherN > 0) slices.push(['other', otherN]);
     const size = 180, r = 80, cx = size/2, cy = size/2;
     let angle = -Math.PI/2;
-    const paths = slices.map(([_, n], i) => {
+    const paths = slices.map(([label, n], i) => {
       const frac = n/total;
-      if (slices.length === 1) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${palette[0]}" stroke="var(--panel)" stroke-width="1.5"/>`;
+      const pct = Math.round(n/total*100);
+      const tip = `<title>${escapeHtml(label)} — ${n} (${pct}%)</title>`;
+      if (slices.length === 1) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${palette[0]}" stroke="var(--panel)" stroke-width="1.5">${tip}</circle>`;
       const a2 = angle + frac * Math.PI*2;
       const large = frac > 0.5 ? 1 : 0;
       const x1 = cx + r*Math.cos(angle), y1 = cy + r*Math.sin(angle);
       const x2 = cx + r*Math.cos(a2), y2 = cy + r*Math.sin(a2);
       angle = a2;
-      return `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${palette[i % palette.length]}" stroke="var(--panel)" stroke-width="1.5"/>`;
+      return `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${palette[i % palette.length]}" stroke="var(--panel)" stroke-width="1.5" class="pie-slice">${tip}</path>`;
     }).join('');
     const legend = slices.map(([label, n], i) => {
       const pct = Math.round(n/total*100);
