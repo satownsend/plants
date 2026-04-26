@@ -258,6 +258,13 @@
   #frostLog .pill-frost{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(126,196,204,.15);color:var(--cool);border:1px solid rgba(126,196,204,.3)}
   #frostLog .pill-damage{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(224,138,74,.15);color:var(--warn);border:1px solid rgba(224,138,74,.3)}
   #frostLog .empty{padding:18px;color:var(--muted);text-align:center}
+  #wishlistTable{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  #wishlistTable table{width:100%;border-collapse:collapse;font-size:13px}
+  #wishlistTable th{position:sticky;top:0;background:var(--panel);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  #wishlistTable td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+  #wishlistTable td.price{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accent)}
+  #wishlistTable td .meta{color:var(--muted);font-size:12px}
+  #wishlistTable .empty{padding:18px;color:var(--muted);text-align:center}
   #recentLog{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:4px}
   #recentLog table{width:100%;border-collapse:collapse;font-size:12px}
   #recentLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
@@ -572,6 +579,11 @@
       <button id="addPlantBtn" class="ghost">+ Add plant</button>
       <span class="right small" id="plantCount"></span>
     </div>
+  </div>
+
+  <div class="panel full" id="wishlistPanel" style="display:none">
+    <h2>Wishlist <span class="small" id="wishlistCount" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)"></span></h2>
+    <div id="wishlistTable" class="small"></div>
   </div>
 
   <div class="panel full" id="frostPanel">
@@ -1130,6 +1142,7 @@ function buildGalleryPool(){
   const f = galleryState.filter;
   const items = [];
   for (const p of (state.plants||[])){
+    if (p.wishlist) continue;        // exclude wishlist plants from rotating gallery
     if (f.plantId && p.id !== f.plantId) continue;
     for (const ph of (p.photos||[])){
       if (!ph || !ph.key) continue;
@@ -1221,7 +1234,7 @@ function populateGalleryFilterUI(){
   const sel = $('#galleryFilterPlant'); if (!sel) return;
   const f = galleryState.filter;
   const opts = ['<option value="">All plants</option>'];
-  for (const p of (state.plants||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))){
+  for (const p of (state.plants||[]).filter(p => !p.wishlist).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))){
     opts.push(`<option value="${p.id}">${escapeHtml(p.name)}</option>`);
   }
   sel.innerHTML = opts.join('');
@@ -1525,7 +1538,7 @@ function buildBrief(){
   const frostT = state.computed?.frostThresh ?? 36;
   const warmT  = state.computed?.warmThresh ?? 80;
 
-  const livePlants = state.plants.filter(p=>!p.dead);
+  const livePlants = state.plants.filter(p => !p.dead && !p.wishlist);
 
   // Frost / cold protection
   const coldDays = days.slice(0,5).filter(d=>d.lo <= frostT);
@@ -1717,7 +1730,8 @@ function renderPlants(){
   tb.innerHTML = '';
   const showDead = $('#showDead').checked;
   const q = ($('#plantFilter').value || '').trim().toLowerCase();
-  let visible = state.plants.filter(p=> showDead || !p.dead);
+  // Wishlist plants are in their own panel — exclude from main inventory.
+  let visible = state.plants.filter(p=> !p.wishlist && (showDead || !p.dead));
   if (q){
     visible = visible.filter(p => {
       const hay = [p.name, p.type, p.category, p.spot, p.tags, p.notes].filter(Boolean).join(' ').toLowerCase();
@@ -1769,9 +1783,11 @@ function renderPlants(){
     tb.appendChild(tr);
   }
   applyColVisibility();
-  const live = state.plants.filter(p=>!p.dead).length;
-  const dead = state.plants.length - live;
-  $('#plantCount').textContent = `${state.plants.length} total`;
+  const inventory = state.plants.filter(p => !p.wishlist);
+  const live = inventory.filter(p => !p.dead).length;
+  const dead = inventory.length - live;
+  const wishCount = state.plants.length - inventory.length;
+  $('#plantCount').textContent = `${inventory.length} total${wishCount ? ` · ${wishCount} on wishlist` : ''}`;
   $('#plantStats').textContent = `${live} living · ${dead} departed`;
 
   // refresh log plant picker label (multi-select selection summary)
@@ -2282,6 +2298,10 @@ $('#upcomingAlerts').addEventListener('click', e=>{
   const row = e.target.closest('.ua');
   if (row) openWeather(parseInt(row.dataset.day, 10));
 });
+$('#wishlistTable').addEventListener('click', e=>{
+  const link = e.target.closest('a[data-info]');
+  if (link){ e.preventDefault(); openInfo(link.dataset.info); }
+});
 $('#addPlantBtn').onclick = ()=>{
   const p = {id:uid(),name:'New plant',type:'',spot:'',container:false,tags:'',notes:''};
   state.plants.push(p); save(); renderPlants(); openEdit(p.id);
@@ -2409,7 +2429,7 @@ function refreshLogPlantBtn(){
     return;
   }
   // Drop any selected ids that no longer exist (e.g., after sheet pull)
-  const living = state.plants.filter(p => !p.dead);
+  const living = state.plants.filter(p => !p.dead && !p.wishlist);
   const livingIds = new Set(living.map(p => p.id));
   for (const id of [...logPlantState.selected]) if (!livingIds.has(id)) logPlantState.selected.delete(id);
   const n = logPlantState.selected.size;
@@ -2424,7 +2444,7 @@ function refreshLogPlantBtn(){
 }
 function buildLogPlantPop(){
   const pop = $('#logPlantPop');
-  const living = state.plants.filter(p => !p.dead).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const living = state.plants.filter(p => !p.dead && !p.wishlist).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
   const q = (logPlantState.search || '').toLowerCase();
   const filtered = q ? living.filter(p => (p.name||'').toLowerCase().includes(q)) : living;
   pop.innerHTML = `
@@ -2995,7 +3015,7 @@ function csvToPlants(rows, existingByName){
         cDate=idx('date purchased'), cQty=idx('quantity'),
         cPrice=idx('price'), cAge=idx('years old at purchase'), cSpot=idx('planting location'),
         cSp=idx('spring color'), cSu=idx('summer color'), cFa=idx('fall color'),
-        cNotes=idx('notes'), cDead=idx('dead');
+        cNotes=idx('notes'), cDead=idx('dead'), cWishlist=idx('wishlist');
   if (cName < 0) throw new Error('Sheet missing required "Common Name" (or legacy "Tree") column header');
   const plants = [];
   for (let r=1; r<rows.length; r++){
@@ -3025,6 +3045,9 @@ function csvToPlants(rows, existingByName){
     const isDead = cDead>=0
       ? /^(true|yes|1|dead|x)$/i.test((row[cDead]||'').trim())
       : !!existing.dead;
+    const isWishlist = cWishlist>=0
+      ? /^(true|yes|1|x)$/i.test((row[cWishlist]||'').trim())
+      : !!existing.wishlist;
     const category = cType>=0 ? (row[cType]||'').trim() : '';
     plants.push({
       id: plantSlug(name),
@@ -3038,6 +3061,7 @@ function csvToPlants(rows, existingByName){
       price: price !== '' ? price : (existing.price || ''),
       purchased: cDate>=0 ? normalizeDate(row[cDate]) : '',
       dead: isDead,
+      wishlist: isWishlist,
       quantity: cQty>=0 ? Math.max(1, parseInt(row[cQty]||'1', 10) || 1) : 1,
       photos: existing.photos || [],
     });
@@ -3458,7 +3482,7 @@ function renderStats(){
 
   // Pie 1: living plants by primary tag (weighted by quantity — a row with
   // quantity 3 contributes 3 to the slice, matching how the bar charts count).
-  const alive = (state.plants||[]).filter(p => !p.dead);
+  const alive = (state.plants||[]).filter(p => !p.dead && !p.wishlist);
   const qtyOf = (p) => Math.max(1, parseInt(p.quantity||1, 10) || 1);
   const tagCounts = new Map();
   for (const p of alive){
@@ -3524,6 +3548,7 @@ function renderStats(){
   // Bar: dollars spent per year, parsed from leading "$NNN" in notes × quantity
   const spent = new Map();
   for (const p of (state.plants||[])){
+    if (p.wishlist) continue;       // not yet acquired
     if (!p.purchased) continue;
     const y = parseInt(String(p.purchased).slice(0,4), 10);
     if (!y || y < 1900 || y > 2100) continue;
@@ -3589,7 +3614,32 @@ function renderFrostLog(){
     + '</tbody></table>';
 }
 
-function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); renderFrostLog(); }
+function renderWishlist(){
+  const panel = $('#wishlistPanel'); if (!panel) return;
+  const items = (state.plants||[]).filter(p => p.wishlist)
+    .slice()
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  if (!items.length){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  $('#wishlistCount').textContent = ` · ${items.length} item${items.length===1?'':'s'}`;
+  $('#wishlistTable').innerHTML = '<table><thead><tr><th>Name</th><th>Latin name</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>'
+    + items.map(p => {
+      const priceStr = fmtPrice(p.price);
+      return `<tr class="wishlist-row" data-info="${p.id}" style="cursor:pointer">
+        <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a></td>
+        <td><span class="meta">${escapeHtml(p.type || '—')}</span></td>
+        <td>${escapeHtml(p.category || '—')}</td>
+        <td class="price">${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
+        <td><span class="meta">${escapeHtml(p.notes || '')}</span></td>
+      </tr>`;
+    }).join('')
+    + '</tbody></table>';
+}
+
+function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); renderFrostLog(); renderWishlist(); }
 render();
 fetchForecast();
 refreshTokenInput();
