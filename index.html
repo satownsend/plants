@@ -238,10 +238,12 @@
   #plantTable.hide-location [data-col="location"],
   #plantTable.hide-planted [data-col="planted"],
   #plantTable.hide-price [data-col="price"],
+  #plantTable.hide-total [data-col="total"],
   #plantTable.hide-watered [data-col="watered"],
   #plantTable.hide-fed [data-col="fed"],
   #plantTable.hide-notes [data-col="notes"]{display:none}
-  #plantTable td[data-col="price"]{font-variant-numeric:tabular-nums;white-space:nowrap}
+  #plantTable td[data-col="price"],
+  #plantTable td[data-col="total"]{font-variant-numeric:tabular-nums;white-space:nowrap}
   #infoHistory{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px}
   #infoHistory table{width:100%;border-collapse:collapse;font-size:12px}
   #infoHistory th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
@@ -567,6 +569,7 @@
           <th data-sort="photos" data-col="photos">Photos</th>
           <th data-sort="planted" data-col="planted">Planted</th>
           <th data-sort="price" data-col="price">Price</th>
+          <th data-sort="total" data-col="total">Total</th>
           <th data-sort="watered" data-col="watered">Last watered</th>
           <th data-sort="fed" data-col="fed">Last fed</th>
           <th data-sort="notes" data-col="notes">Notes</th>
@@ -796,7 +799,7 @@
 </div>
 
 <template id="plantEditTpl">
-  <tr class="edit-row"><td colspan="12">
+  <tr class="edit-row"><td colspan="13">
     <div class="grid3">
       <div>
         <label class="small">Common name</label>
@@ -1714,6 +1717,7 @@ const sortFns = {
   location:(a,b) => (a.spot||'').localeCompare(b.spot||''),
   planted: (a,b) => (a.purchased||'9999-99-99').localeCompare(b.purchased||'9999-99-99'),
   price:   (a,b) => (Number(a.price)||0) - (Number(b.price)||0),
+  total:   (a,b) => ((Number(a.price)||0) * (Number(a.quantity)||1)) - ((Number(b.price)||0) * (Number(b.quantity)||1)),
   photos:  (a,b) => getPhotosForPlant(a).length - getPhotosForPlant(b).length,
   watered: (a,b) => {
     const la = lastLogFor(a.id,'watered'), lb = lastLogFor(b.id,'watered');
@@ -1725,8 +1729,8 @@ const sortFns = {
   },
   notes:   (a,b) => (a.notes||'').localeCompare(b.notes||''),
 };
-const COL_KEYS = ['type','category','location','qty','photos','planted','price','watered','fed','notes'];
-const COL_LABELS = {qty:'Qty', photos:'Photos', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', watered:'Last watered', fed:'Last fed', notes:'Notes'};
+const COL_KEYS = ['type','category','location','qty','photos','planted','price','total','watered','fed','notes'];
+const COL_LABELS = {qty:'Qty', photos:'Photos', category:'Type', type:'Latin name', location:'Location', planted:'Planted', price:'Price', total:'Total', watered:'Last watered', fed:'Last fed', notes:'Notes'};
 const COL_VIS_KEY = 'yardDashboard.colVisibility';
 function loadColVis(){
   try {
@@ -1793,12 +1797,9 @@ function renderPlants(){
     const cellPlanted = p.purchased ? plantedDuration(p.purchased) : '';
     const priceFormatted = fmtPrice(p.price);
     const cellPrice = priceFormatted ? escapeHtml(priceFormatted) : '';
-    // Tooltip with the qty × price total when there are multiples — sheet's
-    // Price column is unit price; total is qty * unit (used in spend chart too).
     const priceNum = Number(p.price);
-    const priceTitle = (priceNum && qty > 1)
-      ? ` title="${escapeHtml(`${qty} × ${fmtPrice(priceNum)} = ${fmtPrice(priceNum * qty)} total`)}"`
-      : '';
+    const totalFormatted = priceNum ? fmtPrice(priceNum * qty) : '';
+    const cellTotal = totalFormatted ? escapeHtml(totalFormatted) : '';
     const cellWatered = lastW ? `${daysSince(lastW.date)}d ago` : '';
     const cellFed = lastF ? `${daysSince(lastF.date)}d ago` : '';
     const cellNotes = p.notes ? `<span class="meta">${escapeHtml(p.notes)}</span>` : '';
@@ -1813,7 +1814,8 @@ function renderPlants(){
       <td data-col="qty" data-label="Qty" class="${qty>1?'':'is-empty-mobile'}">${cellQty}</td>
       <td data-col="photos" data-label="Photos" class="${empty(cellPhotos)}">${cellPhotos || '<span class="meta">—</span>'}</td>
       <td data-col="planted" data-label="Planted" class="${empty(cellPlanted)}">${cellPlanted||'<span class="meta">—</span>'}</td>
-      <td data-col="price" data-label="Price" class="${empty(cellPrice)}"${priceTitle}>${cellPrice||'<span class="meta">—</span>'}</td>
+      <td data-col="price" data-label="Price" class="${empty(cellPrice)}">${cellPrice||'<span class="meta">—</span>'}</td>
+      <td data-col="total" data-label="Total" class="${empty(cellTotal)}">${cellTotal||'<span class="meta">—</span>'}</td>
       <td data-col="watered" data-label="Last watered" class="${empty(cellWatered)}">${cellWatered||'<span class="meta">—</span>'}</td>
       <td data-col="fed" data-label="Last fed" class="${empty(cellFed)}">${cellFed||'<span class="meta">—</span>'}</td>
       <td data-col="notes" data-label="Notes" class="${empty(cellNotes)}">${cellNotes||'<span class="meta">—</span>'}</td>
@@ -3681,16 +3683,11 @@ function renderWishlist(){
   $('#wishlistTable').innerHTML = '<table><thead><tr><th>Name</th><th>Latin name</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>'
     + items.map(p => {
       const priceStr = fmtPrice(p.price);
-      const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
-      const priceNum = Number(p.price);
-      const priceTitle = (priceNum && qty > 1)
-        ? ` title="${escapeHtml(`${qty} × ${fmtPrice(priceNum)} = ${fmtPrice(priceNum * qty)} total`)}"`
-        : '';
       return `<tr class="wishlist-row" data-info="${p.id}" style="cursor:pointer">
         <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a></td>
         <td><span class="meta">${escapeHtml(p.type || '—')}</span></td>
         <td>${escapeHtml(p.category || '—')}</td>
-        <td class="price"${priceTitle}>${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
+        <td class="price">${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
         <td><span class="meta">${escapeHtml(p.notes || '')}</span></td>
       </tr>`;
     }).join('')
