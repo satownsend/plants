@@ -274,6 +274,11 @@
   .photo-grid .ph img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}
   .photo-grid .ph:hover img{transform:scale(1.04)}
   .photo-grid .ph .date{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:10px;padding:14px 6px 4px;text-align:center;font-weight:600;letter-spacing:.04em}
+  .photo-grid .ph-linked{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 5px;border-radius:8px;line-height:1}
+  #lightboxAlsoIn .lb-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:2px 4px 2px 9px;font-size:12px}
+  #lightboxAlsoIn .lb-chip-x{background:transparent;border:none;color:#fff;cursor:pointer;padding:0 4px;font-size:14px;line-height:1}
+  #lightboxAlsoIn .lb-chip-x:hover{color:#f59a8a}
+  #lightboxAlsoIn .lb-add{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer}
   .photo-grid .empty{grid-column:1/-1;color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:18px}
   .photo-timeline{margin-bottom:10px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--bg2)}
   .photo-timeline .pt-stage{position:relative;width:100%;aspect-ratio:1/1;background:#000;display:flex;align-items:center;justify-content:center;cursor:pointer;max-height:70vh}
@@ -655,7 +660,8 @@
     <div id="lightboxMeta" style="color:#ddd;font-size:13px;text-align:center;max-width:96vw;padding:0 12px">
       <input type="date" id="lightboxDate" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:5px 10px;font-weight:600;text-align:center;color-scheme:dark">
       <input type="text" id="lightboxCaption" placeholder="add caption…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 10px;margin-top:6px;width:280px;max-width:90vw">
-      <div style="margin-top:8px;display:flex;gap:8px;justify-content:center">
+      <div id="lightboxAlsoIn" style="margin-top:8px;color:#ccc;font-size:12px;display:flex;flex-wrap:wrap;gap:5px;justify-content:center;align-items:center;max-width:90vw"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
         <button id="lightboxPrev" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">‹ Prev</button>
         <button id="lightboxNext" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">Next ›</button>
         <button id="lightboxDelete" class="ghost tiny" style="color:#f59a8a;border-color:rgba(245,154,138,.3)">Delete</button>
@@ -1789,9 +1795,31 @@ function openInfo(id){
 let currentInfoPlantId = null;
 let lightboxIdx = 0;
 
+// Photo cross-link helpers — let one photo show in multiple plants' modals.
+// The photo stays canonically on its uploader (owner). Other plants are added
+// via photo.alsoIn = [plantId, ...]. owner.photos remains the source of truth.
+function findPhotoOwner(key){
+  if (!key) return null;
+  for (const p of (state.plants||[])){
+    if ((p.photos||[]).some(ph => ph && ph.key === key)) return p;
+  }
+  return null;
+}
+function getPhotosForPlant(p){
+  // Own photos plus any photo from another plant whose alsoIn includes this plant.
+  const out = [...(p.photos || [])];
+  for (const other of (state.plants || [])){
+    if (other.id === p.id) continue;
+    for (const ph of (other.photos || [])){
+      if (Array.isArray(ph.alsoIn) && ph.alsoIn.includes(p.id)) out.push(ph);
+    }
+  }
+  return out.slice().sort((a,b) => (a.date||'').localeCompare(b.date||''));
+}
+
 function renderPhotos(p){
   const grid = $('#infoPhotos');
-  const photos = (p.photos || []).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const photos = getPhotosForPlant(p);
   // Timeline: only show when there are 2+ photos (single photo doesn't need a slider)
   renderPhotoTimeline(photos);
   if (!photos.length){
@@ -1799,11 +1827,13 @@ function renderPhotos(p){
     return;
   }
   // newest first in grid
+  const ownKeys = new Set((p.photos||[]).map(x => x.key));
   grid.innerHTML = photos.slice().reverse().map((ph,i)=>{
     const idx = photos.length - 1 - i;  // index in chronological array
     const url = r2PublicUrl(ph.key);
     const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '';
-    return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}"><div class="date">${dt}</div></div>`;
+    const linkedBadge = ownKeys.has(ph.key) ? '' : '<div class="ph-linked" title="Linked from another plant">🔗</div>';
+    return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}"><div class="date">${dt}</div>${linkedBadge}</div>`;
   }).join('');
 }
 
@@ -1850,10 +1880,20 @@ $('#infoPhotos').addEventListener('click', e=>{
   const ph = e.target.closest('.ph');
   if (!ph) return;
   const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
-  const photos = (p.photos||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const photos = getPhotosForPlant(p);
   openLightbox(photos, parseInt(ph.dataset.idx, 10));
 });
 
+// Lightbox always reads/writes the canonical photo entry on its OWNER plant —
+// not the current viewing plant — so edits to a linked photo show up everywhere
+// it appears.
+function getCanonicalPhoto(ph){
+  if (!ph) return { owner: null, target: null };
+  const owner = findPhotoOwner(ph.key);
+  if (!owner) return { owner: null, target: null };
+  const target = (owner.photos||[]).find(x => x.key === ph.key);
+  return { owner, target };
+}
 function openLightbox(photos, idx){
   if (!photos.length) return;
   state._lightboxPhotos = photos;
@@ -1867,43 +1907,121 @@ function showLightboxIdx(){
   $('#lightboxImg').src = r2PublicUrl(ph.key);
   $('#lightboxDate').value = ph.date || '';
   $('#lightboxCaption').value = ph.caption || '';
+  renderLightboxAlsoIn(ph);
+}
+function renderLightboxAlsoIn(ph){
+  const el = $('#lightboxAlsoIn');
+  const { owner, target } = getCanonicalPhoto(ph);
+  const viewing = state.plants.find(p => p.id === currentInfoPlantId);
+  if (!owner || !target || !viewing){ el.innerHTML = ''; return; }
+  const isOwnerView = owner.id === viewing.id;
+  const linked = Array.isArray(target.alsoIn) ? target.alsoIn.slice() : [];
+  // If we're viewing from a linked plant, prepend "Owner: <name>" so context is clear.
+  const ownerBadge = isOwnerView ? '' : `<span style="color:#aaa">Owned by ${escapeHtml(owner.name)}</span> · `;
+  const chips = linked.map(pid => {
+    const p = state.plants.find(x => x.id === pid);
+    if (!p) return '';
+    return `<span class="lb-chip" data-pid="${pid}">${escapeHtml(p.name)} <button type="button" class="lb-chip-x" data-pid="${pid}" aria-label="Unlink">×</button></span>`;
+  }).join('');
+  // Build "+ link" select with all plants except the owner and any already linked.
+  const excludeIds = new Set([owner.id, ...linked]);
+  const candidates = (state.plants||[])
+    .filter(p => !p.dead && !excludeIds.has(p.id))
+    .slice()
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const addSel = candidates.length
+    ? `<select id="lbAddPlant" class="lb-add"><option value="">+ link to plant…</option>${candidates.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}</select>`
+    : '<span style="color:#777;font-size:11px">all plants linked</span>';
+  el.innerHTML = `${ownerBadge}<span style="color:#aaa">Also in:</span> ${chips || '<em style="color:#777">no other plants</em>'} ${addSel}`;
+  // Wire chip removal
+  el.querySelectorAll('.lb-chip-x').forEach(b => {
+    b.onclick = () => {
+      const pid = b.dataset.pid;
+      target.alsoIn = (target.alsoIn || []).filter(x => x !== pid);
+      if (!target.alsoIn.length) delete target.alsoIn;
+      save();
+      renderLightboxAlsoIn(ph);
+      const cur = state.plants.find(p => p.id === currentInfoPlantId);
+      if (cur) renderPhotos(cur);
+    };
+  });
+  const addEl = $('#lbAddPlant');
+  if (addEl){
+    addEl.onchange = () => {
+      const pid = addEl.value;
+      if (!pid) return;
+      target.alsoIn = target.alsoIn || [];
+      if (!target.alsoIn.includes(pid)) target.alsoIn.push(pid);
+      save();
+      renderLightboxAlsoIn(ph);
+      const cur = state.plants.find(p => p.id === currentInfoPlantId);
+      if (cur) renderPhotos(cur);
+    };
+  }
+  // Toggle Delete button label/behavior — owner deletes; non-owner just unlinks.
+  const delBtn = $('#lightboxDelete');
+  delBtn.textContent = isOwnerView ? 'Delete' : 'Remove link';
 }
 $('#lightboxClose').onclick = ()=> $('#lightbox').classList.remove('show');
 $('#lightbox').addEventListener('click', e=>{ if (e.target.id==='lightbox') $('#lightbox').classList.remove('show'); });
 $('#lightboxPrev').onclick = ()=>{ const n = (state._lightboxPhotos||[]).length; lightboxIdx = (lightboxIdx - 1 + n) % n; showLightboxIdx(); };
 $('#lightboxNext').onclick = ()=>{ const n = (state._lightboxPhotos||[]).length; lightboxIdx = (lightboxIdx + 1) % n; showLightboxIdx(); };
 $('#lightboxCaption').addEventListener('change', ()=>{
-  const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
-  const target = (p.photos||[]).find(x=>x.key===ph.key); if (!target) return;
+  const { target } = getCanonicalPhoto(ph);
+  if (!target) return;
   target.caption = $('#lightboxCaption').value;
   ph.caption = target.caption;
   save();
 });
 $('#lightboxDate').addEventListener('change', ()=>{
-  const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
-  const target = (p.photos||[]).find(x=>x.key===ph.key); if (!target) return;
+  const { target } = getCanonicalPhoto(ph);
+  if (!target) return;
   const newDate = $('#lightboxDate').value;
   if (!newDate) return;
   target.date = newDate;
   ph.date = newDate;
   save();
-  renderPhotos(p);
+  const cur = state.plants.find(p => p.id === currentInfoPlantId);
+  if (cur) renderPhotos(cur);
 });
 $('#lightboxDelete').onclick = async ()=>{
-  if (!confirm('Delete this photo? (Removes from R2 too.)')) return;
-  const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
+  const { owner, target } = getCanonicalPhoto(ph);
+  if (!owner || !target) return;
+  const viewing = state.plants.find(p => p.id === currentInfoPlantId);
+  if (!viewing) return;
+  // Linked view: just remove the link, keep the photo + R2 object intact.
+  if (owner.id !== viewing.id){
+    target.alsoIn = (target.alsoIn || []).filter(x => x !== viewing.id);
+    if (!target.alsoIn.length) delete target.alsoIn;
+    state._lightboxPhotos = (state._lightboxPhotos||[]).filter((_,i)=>i!==lightboxIdx);
+    save();
+    renderPhotos(viewing);
+    if (!state._lightboxPhotos.length){
+      $('#lightbox').classList.remove('show');
+    } else {
+      lightboxIdx = Math.min(lightboxIdx, state._lightboxPhotos.length-1);
+      showLightboxIdx();
+    }
+    return;
+  }
+  // Owner view: full delete. Warn if linked elsewhere.
+  const linkedCount = Array.isArray(target.alsoIn) ? target.alsoIn.length : 0;
+  const msg = linkedCount
+    ? `Delete this photo? It's also linked from ${linkedCount} other plant${linkedCount>1?'s':''}. (Removes from R2 too.)`
+    : 'Delete this photo? (Removes from R2 too.)';
+  if (!confirm(msg)) return;
   try {
     await deletePhotoFromR2(ph.key);
   } catch(e){
     if (!confirm('R2 delete failed: '+e.message+'\n\nRemove from dashboard anyway?')) return;
   }
-  p.photos = (p.photos||[]).filter(x=>x.key!==ph.key);
+  owner.photos = (owner.photos||[]).filter(x=>x.key!==ph.key);
   state._lightboxPhotos = (state._lightboxPhotos||[]).filter((_,i)=>i!==lightboxIdx);
   save();
-  renderPhotos(p);
+  renderPhotos(viewing);
   if (!state._lightboxPhotos.length){
     $('#lightbox').classList.remove('show');
   } else {
