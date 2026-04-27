@@ -1203,6 +1203,24 @@ function fuzzyMatchOrphanSlug(orphanSlug, candidatePlants){
     console.info(`[migration] Remapped ${logs} log entries and ${links} photo links from renamed plants.`);
   }
 })();
+// Migration: auto-hide damage-linked photos from the rotating gallery.
+// Damage shots that were attached before this rule existed didn't get the
+// hide flag set. Walk every frost-damage log entry and apply it. Idempotent:
+// autoHidePhoto skips photos already hidden.
+(function migrateDamagePhotosHide(){
+  let hidden = 0;
+  for (const e of (state.log||[])){
+    if (e.action !== 'frost damage') continue;
+    if (!Array.isArray(e.photoKeys) || !e.photoKeys.length) continue;
+    for (const k of e.photoKeys){
+      if (autoHidePhoto(k)) hidden++;
+    }
+  }
+  if (hidden){
+    saveLocal();
+    console.info(`[migration] Auto-hid ${hidden} damage photo${hidden===1?'':'s'} from gallery.`);
+  }
+})();
 // Hardcoded location: always pin to Lilly, PA 15938
 state.settings.city = 'Lilly, PA 15938';
 state.settings.lat = 40.4238;
@@ -2315,6 +2333,18 @@ function findPhotoOwner(key){
   }
   return null;
 }
+// Set hideFromGallery=true on the canonical photo entry for a given R2 key.
+// Used to auto-hide damage photos from the rotating gallery so they don't
+// surface in the front-page hero strip. Idempotent: skips already-hidden.
+// Returns true if it actually changed something.
+function autoHidePhoto(key){
+  const owner = findPhotoOwner(key);
+  if (!owner) return false;
+  const target = (owner.photos||[]).find(ph => ph.key === key);
+  if (!target || target.hideFromGallery) return false;
+  target.hideFromGallery = true;
+  return true;
+}
 function getPhotosForPlant(p){
   // Own photos plus any photo from another plant whose alsoIn includes this plant.
   const out = [...(p.photos || [])];
@@ -3102,6 +3132,12 @@ $('#logEditSave').onclick = () => {
     e.photoKeys = [...editingLogPhotoKeys];
   } else {
     delete e.photoKeys;
+  }
+  // Auto-hide any photos linked to a frost-damage entry from the rotating
+  // gallery. Damage shots aren't what you want cycling through the hero strip.
+  // Honors the existing manual toggle — already-hidden photos stay hidden.
+  if (e.action === 'frost damage' && Array.isArray(e.photoKeys)){
+    for (const k of e.photoKeys) autoHidePhoto(k);
   }
   $('#logEditModal').classList.remove('show');
   save(); render();
