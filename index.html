@@ -2962,7 +2962,7 @@ $('#logBtn').onclick = ()=>{
   }
   const causedBy = (action === 'frost damage') ? ($('#logCausedBy').value || '') : '';
   for (const t of targets){
-    const entry = {id:uid(), plantId:t, action, note, date, time};
+    const entry = {id:uid(), plantId:t, action, note, date, time, modifiedAt: Date.now()};
     if (temp !== undefined && !isNaN(temp)) entry.temp = temp;
     if (causedBy) entry.causedBy = causedBy;
     state.log.push(entry);
@@ -3139,6 +3139,10 @@ $('#logEditSave').onclick = () => {
   if (e.action === 'frost damage' && Array.isArray(e.photoKeys)){
     for (const k of e.photoKeys) autoHidePhoto(k);
   }
+  // Bump modifiedAt so a later sync from a stale device can't silently revert
+  // this edit. Merges (in pullFromRemote and pushWithRetry) prefer the side
+  // with the larger modifiedAt for matching ids.
+  e.modifiedAt = Date.now();
   $('#logEditModal').classList.remove('show');
   save(); render();
 };
@@ -3755,9 +3759,17 @@ async function pullFromRemote(){
       const remoteIdSet = new Set((remote.data.plants||[]).map(p=>p.id));
       const localOnlyPlants = (state.plants||[]).filter(p => !remoteIdSet.has(p.id));
       state.plants = remote.data.plants ? [...mergedPlants, ...localOnlyPlants] : state.plants;
-      // Build merged log: for each remote entry, prefer the local copy if it exists
-      // (this preserves edits to existing entries). Then append local-only new entries.
-      const mergedRemoteLog = (remote.data.log||[]).map(re => localLogById.get(re.id) || re);
+      // Build merged log: for each remote entry, prefer whichever side has the
+      // more recent modifiedAt. Falls back to local when either side lacks the
+      // timestamp (legacy data) — which preserves the existing "local edits
+      // win" behavior for entries from before the timestamp existed.
+      const mergedRemoteLog = (remote.data.log||[]).map(re => {
+        const le = localLogById.get(re.id);
+        if (!le) return re;
+        const lt = Number(le.modifiedAt) || 0;
+        const rt = Number(re.modifiedAt) || 0;
+        return rt > lt ? re : le;
+      });
       state.log = [...mergedRemoteLog, ...localOnly];
       const hadLocalPhotoPending = localPhotoPending.length > 0;
       const remoteSettings = remote.data.settings || {};
@@ -3839,13 +3851,23 @@ async function pushWithRetry(triesLeft, useOptimistic = true){
       }
     }
   }
-  // Pessimistic path: refetch sha, merge log, PUT.
+  // Pessimistic path: refetch sha, merge log, PUT. For matching ids, take the
+  // side with the larger modifiedAt — protects against this device having a
+  // stale entry that would otherwise overwrite a newer remote edit.
   const remote = await ghFetch();
   let mergedLog = state.log;
   if (remote && remote.data && remote.data.log){
-    const localIds = new Set((state.log||[]).map(e=>e.id));
-    const remoteOnly = remote.data.log.filter(e=>e.id && !localIds.has(e.id));
-    mergedLog = [...remoteOnly, ...state.log];
+    const localById = new Map((state.log||[]).map(e => [e.id, e]));
+    const localIds = new Set(localById.keys());
+    const remoteOnly = remote.data.log.filter(e => e.id && !localIds.has(e.id));
+    const localResolved = (state.log||[]).map(le => {
+      const re = remote.data.log.find(r => r.id === le.id);
+      if (!re) return le;
+      const lt = Number(le.modifiedAt) || 0;
+      const rt = Number(re.modifiedAt) || 0;
+      return rt > lt ? re : le;
+    });
+    mergedLog = [...remoteOnly, ...localResolved];
   }
   state.log = mergedLog;
   const blob = syncBlob();
