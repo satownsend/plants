@@ -356,6 +356,22 @@
   #infoHistory td.when{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
   #infoHistory td.action{color:var(--accent)}
   #infoHistory .empty{padding:14px;color:var(--muted);text-align:center}
+  /* Linked-photo thumbs (edit modal + frost log + per-plant log history) */
+  .lep-list{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .lep-list:empty::before{content:'(none)';color:var(--muted);font-size:12px;font-style:italic}
+  .lep-thumb{position:relative;width:44px;height:44px;border-radius:6px;overflow:hidden;border:1px solid var(--line2);background:var(--bg2);flex:none}
+  .lep-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .lep-thumb .lep-x{position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--panel);border:1px solid var(--line2);color:#f59a8a;font-size:12px;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+  .lep-pick{display:grid;grid-template-columns:repeat(auto-fill, minmax(64px, 1fr));gap:6px}
+  .lep-pick .lep-pick-item{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;border:1px solid var(--line2);cursor:pointer;background:var(--bg2)}
+  .lep-pick .lep-pick-item img{width:100%;height:100%;object-fit:cover;display:block}
+  .lep-pick .lep-pick-item .lep-pick-date{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:9px;padding:8px 4px 2px;text-align:center}
+  .lep-pick .empty{grid-column:1/-1;color:var(--muted);font-style:italic;text-align:center;padding:10px;font-size:12px}
+  /* Inline thumbs in log views (frost log + per-plant history) */
+  .log-thumbs{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+  .log-thumbs .lt{width:24px;height:24px;border-radius:4px;overflow:hidden;border:1px solid var(--line2);cursor:pointer;flex:none}
+  .log-thumbs .lt img{width:100%;height:100%;object-fit:cover;display:block}
+  .log-thumbs .lt-more{font-size:11px;color:var(--muted);align-self:center}
   #frostLog{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
   #frostLog table{width:100%;border-collapse:collapse;font-size:13px}
   #frostLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
@@ -881,6 +897,12 @@
     <label class="small" style="display:block;margin-top:10px">Note
       <input type="text" id="logEditNote" style="width:100%;margin-top:3px">
     </label>
+    <div id="logEditPhotosSection" class="small" style="margin-top:10px;display:none">
+      <div style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px;margin-bottom:4px">Linked photos</div>
+      <div id="logEditPhotos" class="lep-list"></div>
+      <button type="button" class="ghost tiny" id="logEditAddPhotoBtn" style="margin-top:6px">+ Attach a photo</button>
+      <div id="logEditPhotoPicker" style="display:none;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);max-height:240px;overflow:auto"></div>
+    </div>
     <div class="row" style="margin-top:14px;justify-content:space-between">
       <button class="ghost tiny" id="logEditDelete" style="color:#f59a8a;border-color:rgba(245,154,138,.3)">Delete</button>
       <div style="display:flex;gap:8px">
@@ -2249,10 +2271,11 @@ function openInfo(id){
     histEl.innerHTML = '<table><thead><tr><th>When</th><th>Action</th><th>Note</th></tr></thead><tbody>'
       + entries.map(e => {
         const tempBadge = e.temp !== undefined ? `<span style="color:var(--cool)">${escapeHtml(fmtTemp(e.temp))}</span>${e.note ? ' · ' : ''}` : '';
+        const thumbsHtml = renderLogThumbs(e);
         return `<tr class="log-row" data-log-id="${e.id}">
           <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
           <td class="action">${escapeHtml(e.action || '')}</td>
-          <td>${tempBadge}${escapeHtml(e.note || '')}</td>
+          <td>${tempBadge}${escapeHtml(e.note || '')}${thumbsHtml}</td>
         </tr>`;
       }).join('')
       + '</tbody></table>';
@@ -2929,7 +2952,8 @@ function renderLog(){
       const p = state.plants.find(x=>x.id===e.plantId);
       const who = p ? p.name : (e.plantId === '' ? 'Yard' : '?');
       const tempBadge = e.temp !== undefined ? `<span class="meta">${escapeHtml(fmtTemp(e.temp))}${e.note ? ' · ' : ''}</span>` : '';
-      return `<tr class="log-row" data-log-id="${e.id}"><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span></td></tr>`;
+      const thumbsHtml = renderLogThumbs(e);
+      return `<tr class="log-row" data-log-id="${e.id}"><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span>${thumbsHtml}</td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
@@ -2969,9 +2993,77 @@ function openLogEdit(logId){
   $('#logEditTemp').value = (e.temp !== undefined && e.temp !== null) ? e.temp : '';
   $('#logEditTempUnit').textContent = tempUnitSymbol();
   populateCausedBySelect($('#logEditCausedBy'), e.causedBy || '');
+  // Linked-photo picker — show only for plant-specific entries
+  // (yard-wide events can't pick from plant photos).
+  editingLogPhotoKeys = Array.isArray(e.photoKeys) ? [...e.photoKeys] : [];
+  refreshLogEditPhotos();
+  $('#logEditPhotoPicker').style.display = 'none';
   applyLogEditTempVisibility();
   $('#logEditModal').classList.add('show');
 }
+let editingLogPhotoKeys = [];   // mutable working copy until Save commits
+function refreshLogEditPhotos(){
+  const e = (state.log||[]).find(x => x.id === editingLogId);
+  if (!e){ $('#logEditPhotosSection').style.display = 'none'; return; }
+  const plantSel = $('#logEditPlant').value;
+  const plantId = plantSel === '__yard__' ? '' : plantSel;
+  const section = $('#logEditPhotosSection');
+  // Hide entire section for yard-wide entries — no plant means no photo picker.
+  if (!plantId){ section.style.display = 'none'; return; }
+  section.style.display = '';
+  const list = $('#logEditPhotos');
+  list.innerHTML = editingLogPhotoKeys.map(k => {
+    const url = r2PublicUrl(k);
+    return `<div class="lep-thumb" data-key="${escapeHtml(k)}"><img loading="lazy" src="${escapeHtml(url)}" alt=""><button type="button" class="lep-x" data-key="${escapeHtml(k)}" aria-label="Remove">×</button></div>`;
+  }).join('');
+  // Wire remove buttons
+  list.querySelectorAll('.lep-x').forEach(btn => {
+    btn.onclick = () => {
+      editingLogPhotoKeys = editingLogPhotoKeys.filter(x => x !== btn.dataset.key);
+      refreshLogEditPhotos();
+    };
+  });
+}
+function refreshLogEditPhotoPicker(){
+  const pop = $('#logEditPhotoPicker');
+  const plantSel = $('#logEditPlant').value;
+  const plantId = plantSel === '__yard__' ? '' : plantSel;
+  const plant = (state.plants||[]).find(p => p.id === plantId);
+  if (!plant){ pop.innerHTML = '<div class="empty">Pick a plant first.</div>'; return; }
+  const photos = getPhotosForPlant(plant)
+    .slice()
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));   // newest first
+  const attached = new Set(editingLogPhotoKeys);
+  const available = photos.filter(ph => !attached.has(ph.key));
+  if (!available.length){
+    pop.innerHTML = '<div class="lep-pick"><div class="empty">No more photos available for this plant.</div></div>';
+    return;
+  }
+  pop.innerHTML = '<div class="lep-pick">' + available.map(ph => {
+    const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric', year:'2-digit'}) : '';
+    return `<div class="lep-pick-item" data-key="${escapeHtml(ph.key)}"><img loading="lazy" src="${escapeHtml(r2PublicUrl(ph.key))}" alt="">${dt ? `<div class="lep-pick-date">${escapeHtml(dt)}</div>` : ''}</div>`;
+  }).join('') + '</div>';
+  pop.querySelectorAll('.lep-pick-item').forEach(el => {
+    el.onclick = () => {
+      const k = el.dataset.key;
+      if (!editingLogPhotoKeys.includes(k)) editingLogPhotoKeys.push(k);
+      refreshLogEditPhotos();
+      refreshLogEditPhotoPicker();
+    };
+  });
+}
+$('#logEditAddPhotoBtn').onclick = () => {
+  const pop = $('#logEditPhotoPicker');
+  const open = pop.style.display === 'none' || !pop.style.display;
+  if (open){ refreshLogEditPhotoPicker(); pop.style.display = 'block'; }
+  else pop.style.display = 'none';
+};
+$('#logEditPlant').addEventListener('change', () => {
+  // Plant change → previously-attached photos may not belong to the new plant;
+  // keep them but the picker auto-shows photos for the newly-selected plant.
+  refreshLogEditPhotos();
+  if ($('#logEditPhotoPicker').style.display === 'block') refreshLogEditPhotoPicker();
+});
 function applyLogEditTempVisibility(){
   const v = $('#logEditAction').value;
   $('#logEditTempLabel').style.display = isFrostAction(v) ? 'block' : 'none';
@@ -3004,6 +3096,12 @@ $('#logEditSave').onclick = () => {
     else delete e.causedBy;
   } else {
     delete e.causedBy;
+  }
+  // Linked photos — only kept for plant-specific entries
+  if (e.plantId && editingLogPhotoKeys.length){
+    e.photoKeys = [...editingLogPhotoKeys];
+  } else {
+    delete e.photoKeys;
   }
   $('#logEditModal').classList.remove('show');
   save(); render();
@@ -3992,6 +4090,37 @@ function renderStats(){
   }
 }
 
+// Inline-thumbs HTML for log entries with attached photos.
+// Capped at 3 thumbs; "+N" overflow indicator if more.
+// Click → opens the existing lightbox at that photo (in the plant's full set).
+function renderLogThumbs(e){
+  if (!Array.isArray(e.photoKeys) || !e.photoKeys.length) return '';
+  const max = 3;
+  const shown = e.photoKeys.slice(0, max);
+  const more = e.photoKeys.length - shown.length;
+  const thumbs = shown.map(k => `<span class="lt" data-log-id="${e.id}" data-key="${escapeHtml(k)}"><img loading="lazy" src="${escapeHtml(r2PublicUrl(k))}" alt=""></span>`).join('');
+  const overflow = more > 0 ? `<span class="lt-more">+${more}</span>` : '';
+  return ` <span class="log-thumbs">${thumbs}${overflow}</span>`;
+}
+// Click delegation for inline log thumbs (frost log, plant history). Opens the
+// lightbox at the matching photo, using the plant's full photo array so prev/next
+// browse the rest of the plant's history.
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest('.log-thumbs .lt');
+  if (!t) return;
+  ev.stopPropagation();   // prevent row-click from opening the edit modal
+  const logId = t.dataset.logId;
+  const key = t.dataset.key;
+  const e = (state.log||[]).find(x => x.id === logId); if (!e) return;
+  const plant = (state.plants||[]).find(p => p.id === e.plantId); if (!plant) return;
+  const photos = getPhotosForPlant(plant).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const idx = photos.findIndex(ph => ph.key === key);
+  if (idx >= 0){
+    currentInfoPlantId = plant.id;   // make canonical-photo lookups work
+    openLightbox(photos, idx);
+  }
+});
+
 function renderFrostLog(){
   const el = $('#frostLog'); if (!el) return;
   const entries = (state.log||[])
@@ -4026,12 +4155,13 @@ function renderFrostLog(){
           causedByBadge = `<div style="color:var(--muted);font-size:11px;margin-top:2px">↳ caused by (missing event)</div>`;
         }
       }
+      const thumbsHtml = renderLogThumbs(e);
       return `<tr class="log-row" data-log-id="${e.id}">
         <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
         <td class="action"><span class="${pillCls}">${escapeHtml(e.action)}</span></td>
         <td class="when">${temp ? escapeHtml(temp) : '<span style="color:var(--muted)">—</span>'}</td>
         <td>${who === '—' ? '—' : (p ? escapeHtml(p.name) : who)}</td>
-        <td>${escapeHtml(e.note || '')}${causedByBadge}</td>
+        <td>${escapeHtml(e.note || '')}${thumbsHtml}${causedByBadge}</td>
       </tr>`;
     }).join('')
     + '</tbody></table>';
