@@ -4486,21 +4486,61 @@ function renderFrostLog(){
 }
 
 /* ---------- Yard map ---------- */
-const DEFAULT_YARD_MAP = './yard-map.jpg';
+// Image lives in the private our-plants repo. We fetch it via the GitHub API
+// using the same token that data sync uses, then keep a blob URL in memory.
+const YARD_MAP_PATH = 'yard-map.jpg';
 let ympEditing = false;
 let ympSelectedId = null;
 let ympSuppressClick = false;
+let ympMapBlobUrl = null;
+let ympMapStatus = 'idle'; // idle | loading | loaded | no-token | error
 
-function getYardMapUrl(){ return (state.settings && state.settings.yardMap) || DEFAULT_YARD_MAP; }
+async function ensureYardMapLoaded(){
+  if (ympMapBlobUrl || ympMapStatus === 'loading') return;
+  if (state.settings && state.settings.yardMap) return; // override in use, no fetch
+  const token = getToken();
+  if (!token){ ympMapStatus = 'no-token'; return; }
+  ympMapStatus = 'loading';
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${YARD_MAP_PATH}?ref=${GH.branch}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw' }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    ympMapBlobUrl = URL.createObjectURL(blob);
+    ympMapStatus = 'loaded';
+  } catch(e){
+    console.warn('[yard-map] load failed', e);
+    ympMapStatus = 'error';
+  }
+  renderYardMap();
+}
+
+function getYardMapUrl(){
+  if (state.settings && state.settings.yardMap) return state.settings.yardMap;
+  return ympMapBlobUrl;
+}
 
 function renderYardMap(){
   const panel = $('#yardMapPanel'); if (!panel) return;
   const wrap = $('#ympWrap');
-  const url = getYardMapUrl();
   panel.classList.toggle('editing', ympEditing);
 
   const placed = (state.plants||[]).filter(p => p.mapPos && !p.dead && !p.wishlist);
   $('#yardMapCount').textContent = ` · ${placed.length} pin${placed.length===1?'':'s'}`;
+
+  const url = getYardMapUrl();
+  if (!url){
+    // Trigger a load attempt; the function bails if already loading or no token.
+    ensureYardMapLoaded();
+    const msg = ympMapStatus === 'no-token'
+      ? 'Yard map lives in the private repo. Add your GitHub token in Settings to load it.'
+      : ympMapStatus === 'error'
+        ? 'Could not load yard map from the private repo. Check your token has repo scope.'
+        : 'Loading yard map…';
+    wrap.innerHTML = `<div style="padding:24px;color:var(--muted);text-align:center;line-height:1.4">${escapeHtml(msg)}</div>`;
+    return;
+  }
 
   let html = `<img class="ymp-img" src="${escapeHtml(url)}" alt="Yard map" loading="lazy" decoding="async">`;
   for (const p of placed){
