@@ -1136,6 +1136,8 @@ if (!state.plants || !state.plants.length) state.plants = structuredClone(defaul
   }
   if (touched) saveLocal();
 })();
+console.log('[debug] LOAD: log entries with photoKeys =',
+  (state.log||[]).filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).map(e => ({id:e.id, photoKeys:e.photoKeys, modifiedAt:e.modifiedAt})));
 // Migration: when plants are renamed, orphaned plantIds in logs and
 // photo.alsoIn need remapping to the renamed plant. Three matching strategies,
 // in order of confidence:
@@ -3328,6 +3330,7 @@ $('#logEditSave').onclick = () => {
   // this edit. Merges (in pullFromRemote and pushWithRetry) prefer the side
   // with the larger modifiedAt for matching ids.
   e.modifiedAt = Date.now();
+  console.log('[debug] save: id=', e.id, 'photoKeys=', e.photoKeys, 'modifiedAt=', e.modifiedAt);
   $('#logEditModal').classList.remove('show');
   save(); render();
 };
@@ -3823,10 +3826,13 @@ async function pullFromSheet(){
       const nm = oldIdToName.get(oldId);
       return nm ? (newNameToId.get(nm) || null) : null;
     };
+    const beforeSheetMap = (state.log||[]).filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).length;
     state.log = (state.log||[]).map(e => {
       const newId = remap(e.plantId);
       return newId ? {...e, plantId:newId} : e;
     });
+    const afterSheetMap = (state.log||[]).filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).length;
+    console.log(`[debug] pullFromSheet log map: photoKeys entries before=${beforeSheetMap} after=${afterSheetMap}`);
     // Also remap photo cross-links (photo.alsoIn[]) on the existing plants —
     // do this BEFORE we replace state.plants so the carry-over plants keep
     // their links pointing at the new ids.
@@ -3956,6 +3962,8 @@ async function pullFromRemote(){
         return rt > lt ? re : le;
       });
       state.log = [...mergedRemoteLog, ...localOnly];
+      console.log('[debug] pullFromRemote merged. With photoKeys after merge:',
+        state.log.filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).map(e => ({id:e.id, photoKeys:e.photoKeys, modifiedAt:e.modifiedAt})));
       const hadLocalPhotoPending = localPhotoPending.length > 0;
       const remoteSettings = remote.data.settings || {};
       state.settings = {...state.settings, ...remoteSettings};
@@ -4023,9 +4031,12 @@ async function pushWithRetry(triesLeft, useOptimistic = true){
   // even when nobody else is writing. Using lastSha bypasses the read-side cache.
   if (useOptimistic && lastSha){
     const blob = syncBlob();
+    console.log('[debug] pushWithRetry optimistic. Sending photoKeys:',
+      state.log.filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).map(e => ({id:e.id, photoKeys:e.photoKeys, modifiedAt:e.modifiedAt})));
     try {
       const newSha = await ghPut(blob, lastSha);
       lastSha = newSha;
+      console.log('[debug] pushWithRetry optimistic SUCCEEDED. lastSha=', lastSha);
       return;
     } catch(e){
       if (/\b409\b/.test(e.message) || /\b422\b/.test(e.message)){
@@ -4055,6 +4066,8 @@ async function pushWithRetry(triesLeft, useOptimistic = true){
     mergedLog = [...remoteOnly, ...localResolved];
   }
   state.log = mergedLog;
+  console.log('[debug] pushWithRetry pessimistic merged. With photoKeys:',
+    state.log.filter(e => Array.isArray(e.photoKeys) && e.photoKeys.length).map(e => ({id:e.id, photoKeys:e.photoKeys, modifiedAt:e.modifiedAt})));
   const blob = syncBlob();
   try {
     const newSha = await ghPut(blob, remote ? remote.sha : null);
