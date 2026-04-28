@@ -393,6 +393,20 @@
   #wishlistTable td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
   #wishlistTable td .meta{color:var(--muted);font-size:12px}
   #wishlistTable .empty{padding:18px;color:var(--muted);text-align:center}
+  /* Yard map */
+  #yardMapPanel .ymp-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  #yardMapPanel .ymp-toolbar select{background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:13px;max-width:240px}
+  #yardMapPanel .ymp-hint{color:var(--muted);font-size:12px}
+  #yardMapPanel .ymp-wrap{position:relative;display:block;max-width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;line-height:0;touch-action:none}
+  #yardMapPanel .ymp-img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+  #yardMapPanel.editing .ymp-wrap{cursor:crosshair}
+  #yardMapPanel .ymp-pin{position:absolute;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.6);cursor:pointer;z-index:2;touch-action:none}
+  #yardMapPanel .ymp-pin[data-cat="Tree"]{background:#5fa86c}
+  #yardMapPanel .ymp-pin[data-cat="Shrub"]{background:#d4a04a}
+  #yardMapPanel .ymp-pin[data-cat="Vine"]{background:#a16cd6}
+  #yardMapPanel.editing .ymp-pin{cursor:grab}
+  #yardMapPanel.editing .ymp-pin.dragging{cursor:grabbing;opacity:.7;z-index:3}
+  #yardMapPanel .ymp-pin.selected{outline:2px solid var(--accent);outline-offset:2px}
   #recentLog{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:4px}
   #recentLog table{width:100%;border-collapse:collapse;font-size:12px}
   #recentLog th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
@@ -750,6 +764,16 @@
   <div class="panel full" id="wishlistPanel" style="display:none">
     <h2>Wishlist <span class="small" id="wishlistCount" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)"></span></h2>
     <div id="wishlistTable" class="small"></div>
+  </div>
+
+  <div class="panel full" id="yardMapPanel">
+    <h2>Yard map <span class="small" id="yardMapCount" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)"></span></h2>
+    <div class="ymp-toolbar">
+      <button id="ympEditBtn" class="ghost">Edit pins</button>
+      <select id="ympPlantPick" style="display:none"><option value="">— pick a plant to place —</option></select>
+      <span class="ymp-hint" id="ympHint"></span>
+    </div>
+    <div class="ymp-wrap" id="ympWrap"></div>
   </div>
 
   <div class="panel full" id="frostPanel">
@@ -4461,6 +4485,113 @@ function renderFrostLog(){
     + '</tbody></table>';
 }
 
+/* ---------- Yard map ---------- */
+const DEFAULT_YARD_MAP = './yard-map.jpg';
+let ympEditing = false;
+let ympSelectedId = null;
+let ympSuppressClick = false;
+
+function getYardMapUrl(){ return (state.settings && state.settings.yardMap) || DEFAULT_YARD_MAP; }
+
+function renderYardMap(){
+  const panel = $('#yardMapPanel'); if (!panel) return;
+  const wrap = $('#ympWrap');
+  const url = getYardMapUrl();
+  panel.classList.toggle('editing', ympEditing);
+
+  const placed = (state.plants||[]).filter(p => p.mapPos && !p.dead && !p.wishlist);
+  $('#yardMapCount').textContent = ` · ${placed.length} pin${placed.length===1?'':'s'}`;
+
+  let html = `<img class="ymp-img" src="${escapeHtml(url)}" alt="Yard map" loading="lazy" decoding="async">`;
+  for (const p of placed){
+    const x = (p.mapPos.x*100).toFixed(2), y = (p.mapPos.y*100).toFixed(2);
+    const sel = ympSelectedId === p.id ? ' selected' : '';
+    html += `<div class="ymp-pin${sel}" data-id="${p.id}" data-cat="${escapeHtml(p.category||'')}" title="${escapeHtml(p.name + (p.type ? ' · ' + p.type : ''))}" style="left:${x}%;top:${y}%"></div>`;
+  }
+  wrap.innerHTML = html;
+
+  const pick = $('#ympPlantPick');
+  const live = (state.plants||[]).filter(p => !p.dead && !p.wishlist).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  pick.innerHTML = '<option value="">— pick a plant to place —</option>' +
+    live.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.mapPos?' (placed)':''}</option>`).join('');
+  pick.value = ympSelectedId || '';
+  pick.style.display = ympEditing ? '' : 'none';
+  $('#ympEditBtn').textContent = ympEditing ? 'Done' : 'Edit pins';
+  $('#ympHint').textContent = !ympEditing ? ''
+    : ympSelectedId ? 'Click the map to place this plant. Drag pins to move. Right-click a pin to remove.'
+    : 'Drag pins to reposition. Pick a plant to place a new one. Right-click a pin to remove.';
+}
+
+(function wireYardMap(){
+  const wrap = $('#ympWrap'); if (!wrap) return;
+  $('#ympEditBtn').onclick = () => { ympEditing = !ympEditing; ympSelectedId = null; renderYardMap(); };
+  $('#ympPlantPick').onchange = (e) => { ympSelectedId = e.target.value || null; renderYardMap(); };
+
+  wrap.addEventListener('click', e => {
+    if (ympSuppressClick){ ympSuppressClick = false; return; }
+    const pin = e.target.closest('.ymp-pin');
+    if (!ympEditing){
+      if (pin) openInfo(pin.dataset.id);
+      return;
+    }
+    if (pin){ ympSelectedId = pin.dataset.id; renderYardMap(); return; }
+    if (ympSelectedId && e.target.classList.contains('ymp-img')){
+      const rect = wrap.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      const p = state.plants.find(x2 => x2.id === ympSelectedId);
+      if (!p) return;
+      p.mapPos = { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+      save();
+      renderYardMap();
+    }
+  });
+
+  wrap.addEventListener('contextmenu', e => {
+    if (!ympEditing) return;
+    const pin = e.target.closest('.ymp-pin');
+    if (!pin) return;
+    e.preventDefault();
+    if (!confirm('Remove this pin?')) return;
+    const p = state.plants.find(x => x.id === pin.dataset.id);
+    if (p){ delete p.mapPos; save(); renderYardMap(); }
+  });
+
+  wrap.addEventListener('pointerdown', e => {
+    if (!ympEditing) return;
+    const pin = e.target.closest('.ymp-pin');
+    if (!pin) return;
+    e.preventDefault();
+    pin.setPointerCapture(e.pointerId);
+    pin.classList.add('dragging');
+    const startX = e.clientX, startY = e.clientY;
+    let moved = false, lastX = null, lastY = null;
+    const onMove = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 3) return;
+      moved = true;
+      const rect = wrap.getBoundingClientRect();
+      lastX = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      lastY = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+      pin.style.left = (lastX*100).toFixed(2) + '%';
+      pin.style.top  = (lastY*100).toFixed(2) + '%';
+    };
+    const onUp = () => {
+      pin.removeEventListener('pointermove', onMove);
+      pin.removeEventListener('pointerup', onUp);
+      pin.removeEventListener('pointercancel', onUp);
+      pin.classList.remove('dragging');
+      if (moved && lastX !== null){
+        const p = state.plants.find(z => z.id === pin.dataset.id);
+        if (p){ p.mapPos = { x: lastX, y: lastY }; save(); }
+        ympSuppressClick = true;
+      }
+    };
+    pin.addEventListener('pointermove', onMove);
+    pin.addEventListener('pointerup', onUp);
+    pin.addEventListener('pointercancel', onUp);
+  });
+})();
+
 function renderWishlist(){
   const panel = $('#wishlistPanel'); if (!panel) return;
   const items = (state.plants||[]).filter(p => p.wishlist)
@@ -4488,7 +4619,7 @@ function renderWishlist(){
 // Pass a slices object to skip sub-renders that the change couldn't affect.
 // Default (no arg) = re-render everything, matching the old behavior.
 function render(slices){
-  const s = slices || {plants:1, log:1, brief:1, stats:1, gallery:1, frostLog:1, wishlist:1};
+  const s = slices || {plants:1, log:1, brief:1, stats:1, gallery:1, frostLog:1, wishlist:1, yardMap:1};
   if (s.plants)    renderPlants();
   if (s.log)       renderLog();
   if (s.brief)     buildBrief();
@@ -4496,6 +4627,7 @@ function render(slices){
   if (s.gallery)   refreshGallery();
   if (s.frostLog)  renderFrostLog();
   if (s.wishlist)  renderWishlist();
+  if (s.yardMap)   renderYardMap();
 }
 render();
 fetchForecast();
