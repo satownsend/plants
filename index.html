@@ -1646,7 +1646,10 @@ $('#saveSettings').onclick = ()=>{
   state.settings.firstFrost = $('#firstFrostInput').value;
   state.settings.units = $('#unitsInput').value;
   state.settings.zone = $('#zoneInput').value.trim();
-  save(); updateChips(); fetchForecast(true); render();
+  save(); updateChips(); fetchForecast(true);
+  // Settings change can shift establishment stage (frost dates) and brief/stats
+  // (units, frost dates). Log entries and wishlist rows don't depend on settings.
+  render({plants:1, brief:1, stats:1, frostLog:1, gallery:1});
   $('#settingsPanel').style.display='none';
 };
 $('#geocodeBtn').onclick = async ()=>{
@@ -3354,13 +3357,14 @@ $('#logEditSave').onclick = () => {
   // with the larger modifiedAt for matching ids.
   e.modifiedAt = Date.now();
   $('#logEditModal').classList.remove('show');
-  save(); render();
+  // Log changes can't affect the wishlist (wishlist plants don't have log entries shown there).
+  save(); render({plants:1, log:1, brief:1, stats:1, gallery:1, frostLog:1});
 };
 $('#logEditDelete').onclick = () => {
   if (!confirm('Delete this log entry?')) return;
   state.log = (state.log||[]).filter(x => x.id !== editingLogId);
   $('#logEditModal').classList.remove('show');
-  save(); render();
+  save(); render({plants:1, log:1, brief:1, stats:1, gallery:1, frostLog:1});
 };
 // Click delegation: any .log-row in any panel opens the edit modal
 document.addEventListener('click', e => {
@@ -3699,7 +3703,8 @@ async function recoverPhotosFromR2(onStatus){
   if (restored){
     saveLocal();
     if (getToken()) { try { await pushNow(); } catch(e){ queueSync(); } }
-    render();
+    // Photo restore only adds entries to plant.photos — log/brief/frostLog/wishlist unaffected.
+    render({plants:1, gallery:1, stats:1});
   }
   return { restored, plantsTouched, totalKeys: allKeys.length, orphanSlugs };
 }
@@ -4477,7 +4482,18 @@ function renderWishlist(){
     + '</tbody></table>';
 }
 
-function render(){ renderPlants(); renderLog(); buildBrief(); renderStats(); refreshGallery(); renderFrostLog(); renderWishlist(); }
+// Pass a slices object to skip sub-renders that the change couldn't affect.
+// Default (no arg) = re-render everything, matching the old behavior.
+function render(slices){
+  const s = slices || {plants:1, log:1, brief:1, stats:1, gallery:1, frostLog:1, wishlist:1};
+  if (s.plants)    renderPlants();
+  if (s.log)       renderLog();
+  if (s.brief)     buildBrief();
+  if (s.stats)     renderStats();
+  if (s.gallery)   refreshGallery();
+  if (s.frostLog)  renderFrostLog();
+  if (s.wishlist)  renderWishlist();
+}
 render();
 fetchForecast();
 refreshTokenInput();
