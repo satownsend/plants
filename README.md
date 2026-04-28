@@ -38,7 +38,7 @@ Data lives in a private GitHub repo as a single JSON file. Open the page on my p
 
 ### The polish
 
-- Two themes (a deep teal dark mode by default, and a cream light mode)
+- Six themes (Teal Dark by default, plus Cream Light, Redwood, Slate, Maple, and Forest)
 - Fahrenheit / Celsius toggle
 - Hardiness zone, last/first frost dates configurable
 - Mobile-first layout
