@@ -391,7 +391,6 @@
   #wishlistTable table{width:100%;border-collapse:collapse;font-size:13px}
   #wishlistTable th{position:sticky;top:0;background:var(--panel);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   #wishlistTable td{padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
-  #wishlistTable td.price{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accent)}
   #wishlistTable td .meta{color:var(--muted);font-size:12px}
   #wishlistTable .empty{padding:18px;color:var(--muted);text-align:center}
   #recentLog{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:4px}
@@ -4439,14 +4438,13 @@ function renderWishlist(){
   }
   panel.style.display = '';
   $('#wishlistCount').textContent = ` · ${items.length} item${items.length===1?'':'s'}`;
-  $('#wishlistTable').innerHTML = '<table><thead><tr><th>Name</th><th>Latin name</th><th>Type</th><th>Price</th><th>Notes</th></tr></thead><tbody>'
+  $('#wishlistTable').innerHTML = '<table><thead><tr><th>Name</th><th>Latin name</th><th>Type</th><th>Planned Location</th><th>Notes</th></tr></thead><tbody>'
     + items.map(p => {
-      const priceStr = fmtPrice(p.price);
       return `<tr class="wishlist-row" data-info="${p.id}" style="cursor:pointer">
         <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a></td>
         <td><span class="meta">${escapeHtml(p.type || '—')}</span></td>
         <td>${escapeHtml(p.category || '—')}</td>
-        <td class="price">${priceStr ? escapeHtml(priceStr) : '<span class="meta">—</span>'}</td>
+        <td><span class="meta">${escapeHtml(p.spot || '—')}</span></td>
         <td><span class="meta">${escapeHtml(p.notes || '')}</span></td>
       </tr>`;
     }).join('')
