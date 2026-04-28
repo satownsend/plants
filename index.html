@@ -3005,8 +3005,8 @@ $('#wishlistTable').addEventListener('click', e=>{
 });
 
 function startEditSpot(td, id){
-  const p = state.plants.find(x => x.id === id); if (!p) return;
-  const original = p.spot || '';
+  const p0 = state.plants.find(x => x.id === id); if (!p0) return;
+  const original = p0.spot || '';
   td.innerHTML = `<input type="text" placeholder="e.g. front bed, west pot" style="width:100%;background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:13px">`;
   const input = td.querySelector('input');
   input.value = original;
@@ -3015,9 +3015,15 @@ function startEditSpot(td, id){
   let done = false;
   const finish = (commit) => {
     if (done) return; done = true;
-    if (commit && input.value.trim() !== original){
-      p.spot = input.value.trim();
-      save();
+    if (commit){
+      // Re-find by id at commit time. A background pullFromRemote may have
+      // rebuilt state.plants between click and commit, leaving p0 detached
+      // from the array — assigning to p0.spot would never reach sync.
+      const cur = state.plants.find(x => x.id === id);
+      if (cur && input.value.trim() !== (cur.spot || '')){
+        cur.spot = input.value.trim();
+        save();
+      }
     }
     renderWishlist();
   };
@@ -4033,6 +4039,14 @@ function setSyncStatus(label, kind){
 
 async function pullFromRemote(){
   if (!getToken() || syncing) return;
+  // Defer if a local push is queued — the merge logic doesn't field-merge
+  // plants (only photos), so a pull would clobber any unsynced local edits
+  // like the wishlist Planned Location inline edit. Defer too while the user
+  // is actively typing in any input/textarea, so a periodic pull doesn't
+  // destroy the in-progress edit by re-rendering its cell.
+  if (syncTimer) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
   syncing = true;
   try {
     setSyncStatus('pulling…');
