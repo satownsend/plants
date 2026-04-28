@@ -701,6 +701,7 @@
         <option value="brought inside">brought inside</option>
         <option value="frost">frost</option>
         <option value="frost damage">frost damage</option>
+        <option value="trunk measurement">trunk measurement</option>
         <option value="note">note</option>
       </select>
       <button id="logBtn">Log</button>
@@ -714,6 +715,11 @@
       <label class="small" for="logTemp" style="color:var(--muted)">Low temp:</label>
       <input type="number" id="logTemp" step="1" placeholder="e.g. 28" style="flex:1;min-width:0">
       <span class="small" id="logTempUnit" style="color:var(--muted)">°F</span>
+    </div>
+    <div class="row" id="logMeasureRow" style="margin-bottom:8px;gap:6px;display:none;align-items:center">
+      <label class="small" for="logMeasure" style="color:var(--muted)">Trunk:</label>
+      <input type="number" id="logMeasure" step="0.1" min="0" placeholder="e.g. 3.2" style="flex:1;min-width:0">
+      <span class="small" style="color:var(--muted)">in</span>
     </div>
     <div class="row" id="logCausedByRow" style="margin-bottom:8px;gap:6px;display:none;align-items:center">
       <label class="small" for="logCausedBy" style="color:var(--muted);min-width:64px">Caused by:</label>
@@ -921,6 +927,9 @@
     <label class="small" id="logEditTempLabel" style="display:none;margin-top:10px">Low temp <span id="logEditTempUnit" style="color:var(--muted)">°F</span>
       <input type="number" id="logEditTemp" step="1" placeholder="e.g. 28" style="width:100%;margin-top:3px">
     </label>
+    <label class="small" id="logEditMeasureLabel" style="display:none;margin-top:10px">Trunk <span style="color:var(--muted)">in</span>
+      <input type="number" id="logEditMeasure" step="0.1" min="0" placeholder="e.g. 3.2" style="width:100%;margin-top:3px">
+    </label>
     <label class="small" id="logEditCausedByLabel" style="display:none;margin-top:10px">Caused by frost event
       <select id="logEditCausedBy" style="width:100%;margin-top:3px"></select>
     </label>
@@ -959,6 +968,11 @@
     <p class="lat" id="infoType"></p>
     <dl class="kv" id="infoKV"></dl>
     <div id="infoNotes" style="font-size:14px;line-height:1.55;margin-top:6px"></div>
+
+    <div class="trunk-section" id="infoTrunkSection" style="margin-top:18px;display:none">
+      <div class="small" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:11px;margin-bottom:6px">Trunk growth</div>
+      <div id="infoTrunk" class="small"></div>
+    </div>
 
     <div class="history-section" id="infoHistorySection" style="margin-top:18px">
       <div class="small" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:11px;margin-bottom:6px">Log history</div>
@@ -2490,6 +2504,34 @@ function openInfo(id){
   $('#infoKV').innerHTML = rows.map(([k,v])=>`<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('');
   $('#infoNotes').innerHTML = p.notes ? `<em style="color:var(--muted)">Notes:</em> ${escapeHtml(p.notes)}` : '';
 
+  // Trunk growth — show all measurements oldest→newest with deltas
+  const measurements = (state.log||[])
+    .filter(e => e.plantId === p.id && e.action === 'trunk measurement' && e.value !== undefined)
+    .slice()
+    .sort((a,b) => fmtLogWhen(a).localeCompare(fmtLogWhen(b)));
+  const trunkSection = $('#infoTrunkSection');
+  if (!measurements.length){
+    trunkSection.style.display = 'none';
+  } else {
+    trunkSection.style.display = '';
+    const rows = measurements.map((m, i) => {
+      const prev = i > 0 ? measurements[i-1] : null;
+      const delta = prev ? (Number(m.value) - Number(prev.value)) : null;
+      const deltaCell = delta === null ? '<span class="meta">—</span>'
+        : delta === 0 ? '<span class="meta">no change</span>'
+        : `<span style="color:${delta > 0 ? 'var(--accent)' : 'var(--warn)'}">${delta > 0 ? '+' : ''}${delta.toFixed(1)} in</span>`;
+      return `<tr><td class="when">${escapeHtml(fmtLogWhen(m))}</td><td>${escapeHtml(fmtTrunk(m.value))}</td><td>${deltaCell}</td></tr>`;
+    }).join('');
+    const first = measurements[0], last = measurements[measurements.length-1];
+    let summary = '';
+    if (measurements.length >= 2){
+      const totalDelta = Number(last.value) - Number(first.value);
+      summary = ` <span class="meta">· ${totalDelta >= 0 ? '+' : ''}${totalDelta.toFixed(1)} in over ${measurements.length} readings</span>`;
+    }
+    $('#infoTrunk').innerHTML = `<div style="margin-bottom:6px">Latest: <strong>${escapeHtml(fmtTrunk(last.value))}</strong>${summary}</div>`
+      + `<table><thead><tr><th>When</th><th>Trunk</th><th>Δ</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
   // Log history for this plant, newest first
   const entries = (state.log||[]).filter(e => e.plantId === p.id)
     .slice().sort((a,b) => fmtLogWhen(b).localeCompare(fmtLogWhen(a)));
@@ -2500,11 +2542,13 @@ function openInfo(id){
     histEl.innerHTML = '<table><thead><tr><th>When</th><th>Action</th><th>Note</th></tr></thead><tbody>'
       + entries.map(e => {
         const tempBadge = e.temp !== undefined ? `<span style="color:var(--cool)">${escapeHtml(fmtTemp(e.temp))}</span>${e.note ? ' · ' : ''}` : '';
+        const measureBadge = (e.action === 'trunk measurement' && e.value !== undefined)
+          ? `<span style="color:var(--accent)">${escapeHtml(fmtTrunk(e.value))}</span>${e.note ? ' · ' : ''}` : '';
         const thumbsHtml = renderLogThumbs(e);
         return `<tr class="log-row" data-log-id="${e.id}">
           <td class="when">${escapeHtml(fmtLogWhen(e))}</td>
           <td class="action">${escapeHtml(e.action || '')}</td>
-          <td>${tempBadge}${escapeHtml(e.note || '')}${thumbsHtml}</td>
+          <td>${tempBadge}${measureBadge}${escapeHtml(e.note || '')}${thumbsHtml}</td>
         </tr>`;
       }).join('')
       + '</tbody></table>';
@@ -3034,6 +3078,7 @@ function fmtTemp(t){
   return Math.round(n) + tempUnitSymbol();
 }
 function isFrostAction(a){ return a === 'frost' || a === 'frost damage'; }
+function fmtTrunk(v){ const n = Number(v); return isFinite(n) ? `${n.toFixed(1)} in` : ''; }
 function recentFrostEvents(){
   // Returns frost events sorted newest first, capped to keep the dropdown short.
   return (state.log||[])
@@ -3064,6 +3109,8 @@ function applyTempRowVisibility(){
   if (!row) return;
   const action = $('#logAction').value;
   row.style.display = isFrostAction(action) ? 'flex' : 'none';
+  const measureRow = $('#logMeasureRow');
+  if (measureRow) measureRow.style.display = (action === 'trunk measurement') ? 'flex' : 'none';
   const unitEl = $('#logTempUnit');
   if (unitEl) unitEl.textContent = tempUnitSymbol();
   // Caused-by row: only for frost damage. Auto-default to most recent frost
@@ -3193,6 +3240,8 @@ $('#logBtn').onclick = ()=>{
   const time = $('#logTime').value || '';
   const tempRaw = isFrostAction(action) ? $('#logTemp').value.trim() : '';
   const temp = tempRaw === '' ? undefined : (parseFloat(tempRaw));
+  const measureRaw = (action === 'trunk measurement') ? $('#logMeasure').value.trim() : '';
+  const measure = measureRaw === '' ? undefined : parseFloat(measureRaw);
   let targets;
   if (logPlantState.yardWide) targets = [''];
   else targets = [...logPlantState.selected];
@@ -3200,15 +3249,21 @@ $('#logBtn').onclick = ()=>{
     alert('Pick at least one plant (or a yard-wide event) before logging.');
     return;
   }
+  if (action === 'trunk measurement'){
+    if (logPlantState.yardWide){ alert('Trunk measurement needs a specific plant, not a yard-wide entry.'); return; }
+    if (measure === undefined || isNaN(measure)){ alert('Enter a trunk measurement (in inches) before logging.'); return; }
+  }
   const causedBy = (action === 'frost damage') ? ($('#logCausedBy').value || '') : '';
   for (const t of targets){
     const entry = {id:uid(), plantId:t, action, note, date, time, modifiedAt: Date.now()};
     if (temp !== undefined && !isNaN(temp)) entry.temp = temp;
+    if (measure !== undefined && !isNaN(measure)) entry.value = measure;
     if (causedBy) entry.causedBy = causedBy;
     state.log.push(entry);
   }
   $('#logNote').value = '';
   $('#logTemp').value = '';
+  $('#logMeasure').value = '';
   if ($('#logCausedBy')) $('#logCausedBy').value = '';
   resetLogDateTime();
   save(); renderPlants(); renderLog(); buildBrief();
@@ -3222,8 +3277,10 @@ function renderLog(){
       const p = state.plants.find(x=>x.id===e.plantId);
       const who = p ? p.name : (e.plantId === '' ? 'Yard' : '?');
       const tempBadge = e.temp !== undefined ? `<span class="meta">${escapeHtml(fmtTemp(e.temp))}${e.note ? ' · ' : ''}</span>` : '';
+      const measureBadge = (e.action === 'trunk measurement' && e.value !== undefined)
+        ? `<span class="meta" style="color:var(--accent)">${escapeHtml(fmtTrunk(e.value))}${e.note ? ' · ' : ''}</span>` : '';
       const thumbsHtml = renderLogThumbs(e);
-      return `<tr class="log-row" data-log-id="${e.id}"><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}<span class="meta">${escapeHtml(e.note||'')}</span>${thumbsHtml}</td></tr>`;
+      return `<tr class="log-row" data-log-id="${e.id}"><td>${escapeHtml(fmtLogWhen(e))}</td><td>${escapeHtml(who)}</td><td>${e.action}</td><td>${tempBadge}${measureBadge}<span class="meta">${escapeHtml(e.note||'')}</span>${thumbsHtml}</td></tr>`;
     }).join('')
     + '</tbody></table>';
 }
@@ -3262,6 +3319,7 @@ function openLogEdit(logId){
   $('#logEditNote').value = e.note || '';
   $('#logEditTemp').value = (e.temp !== undefined && e.temp !== null) ? e.temp : '';
   $('#logEditTempUnit').textContent = tempUnitSymbol();
+  $('#logEditMeasure').value = (e.value !== undefined && e.value !== null) ? e.value : '';
   populateCausedBySelect($('#logEditCausedBy'), e.causedBy || '');
   // Linked-photo picker — show only for plant-specific entries
   // (yard-wide events can't pick from plant photos).
@@ -3338,6 +3396,7 @@ function applyLogEditTempVisibility(){
   const v = $('#logEditAction').value;
   $('#logEditTempLabel').style.display = isFrostAction(v) ? 'block' : 'none';
   $('#logEditCausedByLabel').style.display = (v === 'frost damage') ? 'block' : 'none';
+  $('#logEditMeasureLabel').style.display = (v === 'trunk measurement') ? 'block' : 'none';
 }
 $('#logEditAction').addEventListener('change', applyLogEditTempVisibility);
 $('#logEditClose').onclick = () => $('#logEditModal').classList.remove('show');
@@ -3366,6 +3425,13 @@ $('#logEditSave').onclick = () => {
     else delete e.causedBy;
   } else {
     delete e.causedBy;
+  }
+  if (action === 'trunk measurement'){
+    const m = $('#logEditMeasure').value.trim();
+    if (m === '') delete e.value;
+    else { const n = parseFloat(m); if (!isNaN(n)) e.value = n; else delete e.value; }
+  } else {
+    delete e.value;
   }
   // Linked photos — only kept for plant-specific entries
   if (e.plantId && editingLogPhotoKeys.length){
