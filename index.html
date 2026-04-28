@@ -1754,12 +1754,15 @@ function buildPrintInventory(){
 
   // Photo cards for plants that have at least one photo (uses linked photos
   // too via getPhotosForPlant). One card per plant, latest photo as the visual.
-  const cardable = inventory.filter(p => getPhotosForPlant(p).length > 0)
+  // Exclude photos flagged hideFromGallery — that's how frost-damage shots get
+  // auto-marked and is also the manual "not representative" toggle.
+  const printablePhotos = (p) => getPhotosForPlant(p).filter(ph => !ph.hideFromGallery);
+  const cardable = inventory.filter(p => printablePhotos(p).length > 0)
     .slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
   if (cardable.length){
     html += `<div class="ps-section">Photo reference</div><div class="ps-cards">`;
     for (const p of cardable){
-      const photos = getPhotosForPlant(p);
+      const photos = printablePhotos(p);
       const latest = photos[photos.length - 1];
       const url = r2PublicUrl(latest.key);
       const qty = Math.max(1, parseInt(p.quantity||1, 10) || 1);
