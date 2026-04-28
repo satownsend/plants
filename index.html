@@ -177,6 +177,7 @@
   @media (max-width:700px){.gallery-stage{aspect-ratio:4/3;max-height:none}}
   .gallery-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:13px;text-align:center;padding:0 20px}
   .gallery-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .9s ease;cursor:pointer}
+  .gallery-stage[data-fit="contain"] .gallery-img{object-fit:contain}
   .gallery-img.is-current{opacity:1}
   .gallery-caption{position:absolute;left:0;right:0;bottom:0;padding:14px 16px 12px;color:#fff;font-size:13px;
     background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.7)}
@@ -186,6 +187,8 @@
   .gallery-filter-btn{position:absolute;top:10px;left:12px;background:rgba(0,0,0,.45);color:#fff;border:1px solid rgba(255,255,255,.15);
     border-radius:999px;padding:5px 11px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px}
   .gallery-filter-btn.is-active{background:var(--accent);color:#06201d;border-color:transparent}
+  .gallery-fit-btn{position:absolute;top:10px;left:90px;background:rgba(0,0,0,.45);color:#fff;border:1px solid rgba(255,255,255,.15);
+    border-radius:999px;padding:5px 11px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px}
   .gallery-filter-pop{position:absolute;top:42px;left:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
     padding:12px 14px;box-shadow:var(--shadow);z-index:5;min-width:240px;max-width:calc(100% - 24px);display:none}
   .gallery-filter-pop.is-open{display:block}
@@ -625,6 +628,7 @@
     <div class="gallery-caption" id="galleryCaption"></div>
     <div class="gallery-dots" id="galleryDots"></div>
     <button class="gallery-filter-btn" id="galleryFilterBtn" aria-haspopup="true" aria-expanded="false">⚲ filter</button>
+    <button class="gallery-fit-btn" id="galleryFitBtn" title="Toggle full-size vs cropped">✂ crop</button>
     <div class="gallery-filter-pop" id="galleryFilterPop" role="dialog" aria-label="Gallery filters">
       <label for="galleryFilterPlant">Plant</label>
       <select id="galleryFilterPlant"></select>
@@ -1351,7 +1355,20 @@ document.addEventListener('click', (e) => {
 /* ---------- photo gallery ---------- */
 const GALLERY_KEY = 'yardDashboard.galleryOn';
 const GALLERY_FILTER_KEY = 'yardDashboard.galleryFilter';
+const GALLERY_FIT_KEY = 'yardDashboard.galleryFit';   // 'cover' (cropped) | 'contain' (full size)
 const galleryState = { pool: [], idx: 0, current: 'A', timer: null, paused: false, filter: loadGalleryFilter() };
+
+function getGalleryFit(){
+  const v = localStorage.getItem(GALLERY_FIT_KEY);
+  return v === 'contain' ? 'contain' : 'cover';   // default cropped
+}
+function applyGalleryFit(){
+  const fit = getGalleryFit();
+  const stage = $('#galleryStage');
+  if (stage) stage.dataset.fit = fit;
+  const btn = $('#galleryFitBtn');
+  if (btn) btn.textContent = fit === 'contain' ? '🖼 full' : '✂ crop';
+}
 
 function loadGalleryFilter(){
   try { return Object.assign({plantId:'', from:'', to:''}, JSON.parse(localStorage.getItem(GALLERY_FILTER_KEY)||'{}')); }
@@ -1520,6 +1537,13 @@ $('#gallerychip').onclick = () => setGalleryOn(!isGalleryOn());
 $('#galleryPrev').onclick = (e) => { e.stopPropagation(); advanceGallery(-1); };
 $('#galleryNext').onclick = (e) => { e.stopPropagation(); advanceGallery(1); };
 $('#galleryFilterBtn').onclick = (e) => { e.stopPropagation(); toggleGalleryFilterPop(); };
+$('#galleryFitBtn').onclick = (e) => {
+  e.stopPropagation();
+  const next = getGalleryFit() === 'cover' ? 'contain' : 'cover';
+  localStorage.setItem(GALLERY_FIT_KEY, next);
+  applyGalleryFit();
+};
+applyGalleryFit();   // sync button label + stage attribute on first load
 $('#galleryFilterPop').addEventListener('click', e => e.stopPropagation());
 $('#galleryFilterApply').onclick = (e) => {
   e.stopPropagation();
