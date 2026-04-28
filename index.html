@@ -2925,8 +2925,34 @@ $('#upcomingAlerts').addEventListener('click', e=>{
 });
 $('#wishlistTable').addEventListener('click', e=>{
   const link = e.target.closest('a[data-info]');
-  if (link){ e.preventDefault(); openInfo(link.dataset.info); }
+  if (link){ e.preventDefault(); openInfo(link.dataset.info); return; }
+  const cell = e.target.closest('[data-edit-spot]');
+  if (cell && !cell.querySelector('input')) startEditSpot(cell, cell.dataset.editSpot);
 });
+
+function startEditSpot(td, id){
+  const p = state.plants.find(x => x.id === id); if (!p) return;
+  const original = p.spot || '';
+  td.innerHTML = `<input type="text" placeholder="e.g. front bed, west pot" style="width:100%;background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:13px">`;
+  const input = td.querySelector('input');
+  input.value = original;
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return; done = true;
+    if (commit && input.value.trim() !== original){
+      p.spot = input.value.trim();
+      save();
+    }
+    renderWishlist();
+  };
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape'){ e.preventDefault(); finish(false); }
+  });
+}
 $('#addPlantBtn').onclick = ()=>{
   const p = {id:uid(),name:'New plant',type:'',spot:'',container:false,tags:'',notes:''};
   state.plants.push(p); save(); renderPlants(); openEdit(p.id);
@@ -4444,7 +4470,7 @@ function renderWishlist(){
         <td><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a></td>
         <td><span class="meta">${escapeHtml(p.type || '—')}</span></td>
         <td>${escapeHtml(p.category || '—')}</td>
-        <td><span class="meta">${escapeHtml(p.spot || '—')}</span></td>
+        <td data-edit-spot="${p.id}" title="Click to edit" style="cursor:text"><span class="meta">${escapeHtml(p.spot || '—')}</span></td>
         <td><span class="meta">${escapeHtml(p.notes || '')}</span></td>
       </tr>`;
     }).join('')
