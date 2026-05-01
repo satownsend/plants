@@ -443,6 +443,16 @@
   #lightboxAlsoIn .lb-chip-x{background:transparent;border:none;color:#fff;cursor:pointer;padding:0 4px;font-size:14px;line-height:1}
   #lightboxAlsoIn .lb-chip-x:hover{color:#f59a8a}
   #lightboxAlsoIn .lb-add{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer}
+  /* Mobile: hide caption / link-to-plant / hide-from-gallery so the image fills more screen.
+     Keep the date and the Prev/Next/Delete row — those are essential controls. */
+  @media (max-width:640px){
+    #lightboxCaption,
+    #lightboxAlsoIn,
+    #lightboxHideRow{display:none !important}
+    #lightbox > div{padding-top:24px;gap:6px}
+    #lightboxMeta{font-size:12px}
+    #lightboxDate{padding:4px 8px}
+  }
   .photo-grid .empty{grid-column:1/-1;color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:18px}
   .photo-timeline{margin-bottom:10px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--bg2)}
   .photo-timeline .pt-stage{position:relative;width:100%;aspect-ratio:1/1;background:#000;display:flex;align-items:center;justify-content:center;cursor:pointer;max-height:70vh}
