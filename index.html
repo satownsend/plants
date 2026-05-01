@@ -444,12 +444,18 @@
   #lightboxAlsoIn .lb-chip-x:hover{color:#f59a8a}
   #lightboxAlsoIn .lb-add{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer}
   /* Mobile: hide caption / link-to-plant / hide-from-gallery so the image fills more screen.
-     Keep the date and the Prev/Next/Delete row — those are essential controls. */
+     Keep the date and the Prev/Next/Delete row — those are essential controls.
+     Also push the wrapper to full viewport, drop the chrome padding, and clear
+     the img element's background so any aspect-ratio gaps blend with the
+     lightbox backdrop instead of forming a visible darker rectangle. */
   @media (max-width:640px){
     #lightboxCaption,
     #lightboxAlsoIn,
     #lightboxHideRow{display:none !important}
-    #lightbox > div{padding-top:24px;gap:6px}
+    #lightbox{padding:0}
+    #lightbox > div{width:100vw;max-width:100vw;height:100vh;max-height:100vh;padding-top:0;padding-bottom:8px;gap:6px}
+    #lightboxImg{background:transparent;border-radius:0}
+    #lightboxClose{top:8px;right:8px}
     #lightboxMeta{font-size:12px}
     #lightboxDate{padding:4px 8px}
   }
