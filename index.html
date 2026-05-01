@@ -154,7 +154,7 @@
     color:var(--ink);
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;}
   a{color:var(--accent);text-decoration:none}
-  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px;overflow:hidden}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
   header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   h1{font:700 30px/1.1 "clother", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;margin:0;letter-spacing:-.015em;color:var(--accent)}
   h2{font:600 14px/1 "SF Pro Display",sans-serif;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -503,11 +503,11 @@
     input[type=text],input[type=date],input[type=number],select,textarea{
       padding:9px 11px;font-size:16px; /* 16px prevents iOS zoom on focus */
     }
-    /* Quick log row stacks */
-    .panel select#logPlant{min-width:0;width:100%;flex:1 1 100%}
-    .panel #logPlantBtn{min-width:0;width:100%;flex:1 1 100%}
-    #plantFilter{max-width:none;width:100%;flex:1 1 100%}
-    .panel select#logAction{width:100%;flex:1 1 100%}
+    /* Quick log row stacks — !important needed to override inline styles */
+    .panel select#logPlant{min-width:0 !important;width:100% !important;flex:1 1 100% !important}
+    .panel #logPlantBtn{min-width:0 !important;width:100% !important;flex:1 1 100% !important}
+    #plantFilter{max-width:none !important;width:100% !important;flex:1 1 100% !important;min-width:0 !important}
+    .panel select#logAction{width:100% !important;flex:1 1 100% !important}
     /* Plant table → cards */
     #plantTable thead{display:none}
     #plantTable, #plantTable tbody{display:block;width:100%}
