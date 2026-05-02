@@ -355,6 +355,8 @@
   #plantTable.hide-notes [data-col="notes"]{display:none}
   #plantTable td[data-col="price"],
   #plantTable td[data-col="total"]{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .plant-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:8px;flex:none}
+  #plantTable:not(.show-thumbs) .plant-thumb{display:none}
   body.view-only [data-col="edit"],
   body.view-only #addPlantBtn,
   body.view-only .edit-row,
@@ -765,6 +767,7 @@
     <div class="filter-row">
       <input type="search" id="plantFilter" placeholder="Filter plants by name, type, location, tag…" style="flex:1;min-width:160px;max-width:340px">
       <label><input type="checkbox" id="showDead"> Show departed (RIP)</label>
+      <label><input type="checkbox" id="showThumbs"> Thumbnails</label>
       <span style="position:relative">
         <button class="ghost tiny" id="colsBtn" aria-haspopup="true" aria-expanded="false">⚙ columns</button>
         <div class="cols-pop" id="colsPop" role="dialog" aria-label="Show/hide columns" style="display:none"></div>
@@ -2527,7 +2530,7 @@ function renderPlants(){
     const cellPhotos = photoCount ? String(photoCount) : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
-      <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
+      <td data-col="name" style="display:flex;align-items:center">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt="">` : ''; })()}<span><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</span></td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
@@ -2556,6 +2559,13 @@ function renderPlants(){
 }
 $('#showDead').addEventListener('change', renderPlants);
 $('#plantFilter').addEventListener('input', renderPlants);
+const THUMB_KEY = 'yardDashboard.showThumbs';
+$('#showThumbs').checked = localStorage.getItem(THUMB_KEY) === '1';
+$('#plantTable').classList.toggle('show-thumbs', $('#showThumbs').checked);
+$('#showThumbs').addEventListener('change', ()=>{
+  localStorage.setItem(THUMB_KEY, $('#showThumbs').checked ? '1' : '0');
+  $('#plantTable').classList.toggle('show-thumbs', $('#showThumbs').checked);
+});
 
 // Columns popover
 function buildColsPop(){
