@@ -358,6 +358,7 @@
   #plantTable:not(.show-thumbs) [data-col="thumb"]{display:none}
   .thumb-wrap{position:relative;display:inline-block}
   .plant-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;vertical-align:middle;cursor:pointer}
+  .mobile-photo-icon{display:none}
   .thumb-preview{display:none;position:absolute;left:50%;top:100%;transform:translateX(-50%);width:200px;height:200px;object-fit:cover;border-radius:10px;border:2px solid var(--line2);box-shadow:var(--shadow);z-index:50;margin-top:6px;background:var(--panel)}
   .thumb-preview.flip-up{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
   .thumb-wrap:hover .thumb-preview{display:block}
@@ -554,6 +555,7 @@
     /* Mobile: only show name, type, edit — collapse the rest into the tap-to-open card */
     #plantTable td[data-col]:not([data-col="name"]):not([data-col="category"]):not([data-col="edit"]){display:none}
     #plantTable td[data-col="category"]{font-size:12px;color:var(--muted);margin-top:-4px}
+    .mobile-photo-icon{display:inline;font-size:10px;margin-left:5px;opacity:.5}
     /* Edit button: top-right of card */
     #plantTable td:last-child{
       position:absolute;top:10px;right:10px;padding:0;
@@ -2541,7 +2543,7 @@ function renderPlants(){
     const cellPhotos = photoCount ? String(photoCount) : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
-      <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
+      <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}${getPhotosForPlant(p).length?'<span class="mobile-photo-icon" title="Has photos">📷</span>':''}</td>
       <td data-col="thumb">${(()=>{ const photos = (p.photos||[]); const ph = (p.thumbKey && photos.find(x=>x.key===p.thumbKey)) || photos.find(x=>!x.hideFromGallery); return ph ? `<span class="thumb-wrap"><img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""><img class="thumb-preview" data-src="${r2PublicUrl(ph.key)}" alt=""></span>` : ''; })()}</td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
