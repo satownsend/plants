@@ -843,6 +843,10 @@
 
 </div>
 
+<div style="text-align:center;margin:24px 0 8px">
+  <button class="ghost tiny" id="settingsBtnBottom">Settings</button>
+</div>
+
 <div class="panel full" id="settingsPanel" style="display:none;margin-top:16px">
   <h2>Settings</h2>
   <div class="grid3">
@@ -1694,7 +1698,7 @@ function openSettings(){
   if (typeof refreshR2Input === 'function') refreshR2Input();
   p.scrollIntoView({behavior:'smooth', block:'start'});
 }
-$('#settingsBtn').onclick = ()=>{
+$('#settingsBtn').onclick = $('#settingsBtnBottom').onclick = ()=>{
   const p = $('#settingsPanel');
   if (p.style.display === 'block') p.style.display = 'none';
   else openSettings();
