@@ -1783,15 +1783,15 @@ function buildPrintInventory(){
       <td class="num">${qty}</td>
       <td class="num">${p.purchased ? escapeHtml(fmtDate(p.purchased)) : '<span class="muted">—</span>'}</td>
       <td class="num">${planted ? escapeHtml(planted) : '<span class="muted">—</span>'}</td>
-      <td class="num">${price ? escapeHtml(fmtMoney(price)) : '<span class="muted">—</span>'}</td>
-      <td class="num">${total ? escapeHtml(fmtMoney(total)) : '<span class="muted">—</span>'}</td>
+      ${isGsAuthed() ? `<td class="num">${price ? escapeHtml(fmtMoney(price)) : '<span class="muted">—</span>'}</td>` : ''}
+      ${isGsAuthed() ? `<td class="num">${total ? escapeHtml(fmtMoney(total)) : '<span class="muted">—</span>'}</td>` : ''}
     </tr>`;
   }).join('');
 
   const tableHeader = `<thead><tr>
     <th>Name</th><th>Latin name</th><th>Type</th><th>Location</th>
     <th class="num">Qty</th><th class="num">Purchased</th><th class="num">Age</th>
-    <th class="num">Unit \$</th><th class="num">Total \$</th>
+    ${isGsAuthed() ? '<th class="num">Unit $</th><th class="num">Total $</th>' : ''}
   </tr></thead>`;
 
   let html = `
@@ -1802,7 +1802,7 @@ function buildPrintInventory(){
       <div><span class="lbl">Living</span><span class="val">${living.length}</span></div>
       <div><span class="lbl">Departed</span><span class="val">${departed.length}</span></div>
       <div><span class="lbl">Species</span><span class="val">${speciesSet.size}</span></div>
-      <div><span class="lbl">Total invested</span><span class="val">${fmtMoney(totalSpent)}</span></div>
+      ${isGsAuthed() ? `<div><span class="lbl">Total invested</span><span class="val">${fmtMoney(totalSpent)}</span></div>` : ''}
     </div>
     <div class="ps-section">Living plants</div>
     <table>${tableHeader}<tbody>${renderRows(living)}</tbody></table>
@@ -1843,8 +1843,8 @@ function buildPrintInventory(){
             ${dl('Quantity', qty > 1 ? qty : '')}
             ${dl('Purchased', p.purchased ? fmtDate(p.purchased) : '')}
             ${dl('Age', planted)}
-            ${dl('Unit price', price ? fmtMoney(price) : '')}
-            ${dl('Total cost', total ? fmtMoney(total) : '')}
+            ${isGsAuthed() ? dl('Unit price', price ? fmtMoney(price) : '') : ''}
+            ${isGsAuthed() ? dl('Total cost', total ? fmtMoney(total) : '') : ''}
             ${dl('Notes', p.notes)}
           </dl>
         </div>
@@ -2467,6 +2467,9 @@ function applyColVisibility(){
   const t = $('#plantTable');
   if (!t) return;
   for (const k of COL_KEYS) t.classList.toggle('hide-'+k, hiddenCols.has(k));
+  if (!isGsAuthed()){
+    t.classList.add('hide-price', 'hide-total');
+  }
 }
 function fmtPrice(n){
   const num = Number(n);
@@ -4458,8 +4461,15 @@ function renderStats(){
   const fmtMoney = n => n >= 1000 ? '$'+Math.round(n/100)/10+'k' : '$'+Math.round(n);
   // Pretty-format whole dollars with commas for the grand-total line
   const fmtMoneyFull = n => '$' + Math.round(n).toLocaleString();
-  drawYearBars('#statsSpend', spent, fmtMoney, 'Money spent per year',
-    'No prices recorded in notes.', 'var(--accent2)');
+  const spendEl = $('#statsSpend');
+  if (!isGsAuthed()){
+    if (spendEl) spendEl.innerHTML = '';
+    const spendTotalEl = $('#statsSpendTotal');
+    if (spendTotalEl) spendTotalEl.textContent = '';
+  } else {
+    drawYearBars('#statsSpend', spent, fmtMoney, 'Money spent per year',
+      'No prices recorded in notes.', 'var(--accent2)');
+  }
 
   // Grand totals beneath the per-year bar charts.
   const acquiredTotal = [...acquired.values()].reduce((s,n) => s+n, 0);
@@ -4474,7 +4484,7 @@ function renderStats(){
       : '';
   }
   const spendSummary = $('#statsSpendTotal');
-  if (spendSummary){
+  if (spendSummary && isGsAuthed()){
     spendSummary.textContent = spentTotal
       ? `Total: ${fmtMoneyFull(spentTotal)} · avg ${fmtMoneyFull(spentTotal/yearsSpan)}/yr`
       : '';
