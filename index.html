@@ -280,7 +280,6 @@
   .tasks .tag.protect{background:#3a2418;color:#e8a06a}
   .tasks .tag.feed{background:#3a3018;color:#d4b568}
   .tasks .tag.prune{background:#2e2440;color:#b89edc}
-  .tasks .tag.inspect{background:#1f3a25;color:var(--accent)}
   .tasks .tag.move{background:#3a2424;color:#d48a8a}
   .forecast{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
   .forecast .day{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;font-size:12px}
@@ -594,7 +593,6 @@
   [data-theme="light"] .tasks .tag.protect{background:#f5e0c8;color:#9c4a18}
   [data-theme="light"] .tasks .tag.feed{background:#f0e6c2;color:#7a5a17}
   [data-theme="light"] .tasks .tag.prune{background:#e7dff0;color:#5a3d8a}
-  [data-theme="light"] .tasks .tag.inspect{background:#dde9d4;color:#3d6b22}
   [data-theme="light"] .tasks .tag.move{background:#f0d8d8;color:#8a3d3d}
   [data-theme="light"] tr:hover td{background:rgba(61,107,34,.05)}
   [data-theme="light"] .modal-back{background:rgba(80,70,50,.45)}
@@ -724,7 +722,7 @@
         <option value="fertilized">fertilized</option>
         <option value="pruned">pruned</option>
         <option value="sprayed">sprayed</option>
-        <option value="inspected">inspected</option>
+
         <option value="moved">moved</option>
         <option value="repotted">repotted</option>
         <option value="covered">covered</option>
@@ -2376,7 +2374,7 @@ function buildBrief(){
     const rainWhy = recentRainfall !== null && recentRainfall >= dryThreshold
       ? `Already got ${recentRainfall.toFixed(2)} ${pu} in the last 3 days. Skip watering; check stake ties and mulch washouts after.`
       : 'Skip watering today; check stake ties and mulch washouts after.';
-    tasks.push({tag:'inspect', title:`Rain likely ${prettyDate(wet.date)} (${wet.pop||0}% / ${wet.pcp||0})`, why: rainWhy});
+    tasks.push({tag:'water', title:`Rain likely ${prettyDate(wet.date)} (${wet.pop||0}% / ${wet.pcp||0})`, why: rainWhy});
   }
 
   // Seasonal tasks driven by frost dates
@@ -2389,7 +2387,7 @@ function buildBrief(){
     } else if (dToLast < 0 && dToLast >= -21){
       tasks.push({tag:'feed',title:`Past last frost (${-dToLast}d) — safe to fertilize most established plants`,
         why:'Skip feeding anything frost-stressed in the past 10 days.'});
-      tasks.push({tag:'inspect',title:'Check roses for bud swell and new cane growth', why:'Good window to scout for aphids and apply first round of disease prevention.'});
+      tasks.push({tag:'feed',title:'Check roses for bud swell and new cane growth', why:'Good window to scout for aphids and apply first round of disease prevention.'});
     }
   }
   if (ff){
@@ -2399,28 +2397,8 @@ function buildBrief(){
     }
   }
 
-  // First-year plantings: dedicated inspection reminder
-  const firstYear = livePlants.filter(p=>establishmentStage(p) === 'establishment');
-  if (firstYear.length){
-    tasks.push({
-      tag:'inspect',
-      title:`Establishment year: ${firstYear.length} young tree${firstYear.length>1?'s':''} need extra care`,
-      why: `Keep moisture even (no drought stress); skip fertilizer until next year; watch for transplant shock and pest damage. ${firstYear.slice(0,5).map(p=>p.name).join(', ')}${firstYear.length>5?` +${firstYear.length-5} more`:''}`
-    });
-  }
-
-  // Plants with no recent inspection
-  const stalePlants = livePlants.filter(p=>{
-    const last = lastLogFor(p.id);
-    return !last || daysSince(last.date) >= 14;
-  });
-  if (stalePlants.length){
-    tasks.push({tag:'inspect',title:`Walk-by check: ${stalePlants.length} plant${stalePlants.length>1?'s':''} without notes in 2+ weeks`,
-      why: stalePlants.slice(0,5).map(p=>p.name).join(', ')});
-  }
-
   // Topline summary — pick the 2 most important
-  const order = ['protect','water','move','feed','prune','inspect'];
+  const order = ['protect','water','move','feed','prune'];
   tasks.sort((a,b)=>order.indexOf(a.tag)-order.indexOf(b.tag));
   const top = tasks.slice(0,2);
   $('#topline').textContent = top.length
