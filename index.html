@@ -2247,13 +2247,18 @@ function renderRainfall(pu){
   const max = Math.max(0.1, ...sorted.map(r => r.amount || 0));
   const w = 360, h = 60, padB = 14, padT = 4;
   const bw = w / sorted.length;
+  const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
   const bars = sorted.map((r, i) => {
     const amt = r.amount || 0;
-    if (amt < 0.005) return '';
+    const x = i * bw;
+    const label = `${fmtDate(r.date)}: ${amt > 0 ? amt.toFixed(2) + ' ' + pu : 'dry'}`;
+    // Invisible full-height hit area for hover on every day
+    const hit = `<rect x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${(h - padB).toFixed(1)}" fill="transparent"><title>${label}</title></rect>`;
+    if (amt < 0.005) return hit;
     const bh = (h - padT - padB) * (amt / max);
-    const x = i * bw + bw * 0.1;
-    const y = h - padB - bh;
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw * 0.8).toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--cool)" opacity="0.7" rx="1"><title>${r.date}: ${amt.toFixed(2)} ${pu}</title></rect>`;
+    const bx = x + bw * 0.1;
+    const by = h - padB - bh;
+    return `${hit}<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${(bw * 0.8).toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--cool)" opacity="0.7" rx="1" style="pointer-events:none"/>`;
   }).join('');
   // Week markers
   const marks = sorted.map((r, i) => {
