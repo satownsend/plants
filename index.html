@@ -3977,7 +3977,8 @@ function sheetCsvUrl(gid){
 async function fetchSheetTab(gid){
   const r = await fetch(sheetCsvUrl(gid), {cache:'no-store'});
   if (!r.ok) throw new Error(`Sheet fetch failed: HTTP ${r.status}`);
-  return parseCSV(await r.text());
+  const text = (await r.text()).replace(/^﻿/, '');
+  return parseCSV(text);
 }
 
 function rowsToObjects(rows){
