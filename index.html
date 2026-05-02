@@ -1514,6 +1514,13 @@ function showGalleryPhoto(item){
     incoming.classList.add('is-current');
     outgoing.classList.remove('is-current');
     galleryState.current = galleryState.current === 'A' ? 'B' : 'A';
+    galleryState._errStreak = 0;
+  };
+  // If the image 404s (deleted from R2), skip to the next photo.
+  // Track consecutive errors to avoid infinite loops on an all-broken pool.
+  incoming.onerror = () => {
+    galleryState._errStreak = (galleryState._errStreak || 0) + 1;
+    if (galleryState._errStreak < galleryState.pool.length) advanceGallery(1);
   };
   incoming.dataset.plantId = item.plantId;
   incoming.dataset.key = item.key;
@@ -2645,7 +2652,7 @@ function renderPhotos(p){
     const dt = ph.date ? new Date(ph.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '';
     const linkedBadge = ownKeys.has(ph.key) ? '' : '<div class="ph-linked" title="Linked from another plant">🔗</div>';
     const hiddenBadge = ph.hideFromGallery ? '<div class="ph-hidden" title="Hidden from rotating gallery">🚫</div>' : '';
-    return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}"><div class="date">${dt}</div>${linkedBadge}${hiddenBadge}</div>`;
+    return `<div class="ph" data-idx="${idx}"><img loading="lazy" src="${url}" alt="${escapeHtml(ph.caption||'')}" onerror="this.style.display='none';this.parentNode.style.background='var(--bg2)';this.parentNode.insertAdjacentHTML('afterbegin','<div style=&quot;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px&quot;>missing</div>')"><div class="date">${dt}</div>${linkedBadge}${hiddenBadge}</div>`;
   }).join('');
 }
 
@@ -2716,7 +2723,10 @@ function openLightbox(photos, idx){
 function showLightboxIdx(){
   const photos = state._lightboxPhotos || [];
   const ph = photos[lightboxIdx]; if (!ph) return;
-  $('#lightboxImg').src = r2PublicUrl(ph.key);
+  const lbImg = $('#lightboxImg');
+  lbImg.onerror = () => { lbImg.alt = 'Photo not found — it may have been deleted from storage.'; };
+  lbImg.alt = '';
+  lbImg.src = r2PublicUrl(ph.key);
   $('#lightboxDate').value = ph.date || '';
   $('#lightboxCaption').value = ph.caption || '';
   // Read hideFromGallery off the canonical photo entry (so a linked-view
