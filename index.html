@@ -1077,7 +1077,7 @@
 const KEY = 'yardDashboard.v4';
 // Google Sheets sync state
 const SHEETS_ID = '1Q1kRZG0jjkYF7pCSZXZIgE5B_kCorDovO2I7ATE3vUM';
-const SHEETS_GID = { plants: 0, plant_tags: 1113148227, plant_photos: 396120968 };
+const SHEETS_GID = { plants: 0, plant_tags: 1113148227, plant_photos: 396120968, log: 322094770 };
 const GS_CLIENT_ID = '936411146633-16fq9oc08auslfprvgbl9bpoafbvo9uk.apps.googleusercontent.com';
 const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 const GS_TOKEN_KEY = 'yardDashboard.gsToken';
@@ -3999,14 +3999,16 @@ async function pullFromSheets(){
   };
   try {
     setStatus('Loading from Google Sheets…');
-    const [plantsRows, tagsRows, photosRows] = await Promise.all([
+    const [plantsRows, tagsRows, photosRows, logRows] = await Promise.all([
       fetchSheetTab(SHEETS_GID.plants),
       fetchSheetTab(SHEETS_GID.plant_tags),
       fetchSheetTab(SHEETS_GID.plant_photos),
+      fetchSheetTab(SHEETS_GID.log),
     ]);
     const rawPlants = rowsToObjects(plantsRows);
     const rawTags = rowsToObjects(tagsRows);
     const rawPhotos = rowsToObjects(photosRows);
+    const rawLog = rowsToObjects(logRows);
 
     // Build tags lookup: plant_id -> comma-separated tags
     const tagsByPlant = new Map();
@@ -4066,7 +4068,29 @@ async function pullFromSheets(){
     const remoteIds = new Set(plants.map(p => p.id));
     const localOnly = (state.plants||[]).filter(p => !remoteIds.has(p.id));
 
+    // Assemble log entries
+    const remoteLog = rawLog.map(e => {
+      const pks = (e.photoKeys||'').split('|').filter(Boolean);
+      return {
+        id: e.id || '',
+        plantId: e.plantId || '',
+        action: e.action || '',
+        date: e.date || '',
+        time: e.time || '',
+        note: e.note || '',
+        ...(e.value ? {value: e.value} : {}),
+        ...(e.temp ? {temp: e.temp} : {}),
+        ...(e.causedBy ? {causedBy: e.causedBy} : {}),
+        ...(pks.length ? {photoKeys: pks} : {}),
+        ...(e.modifiedAt ? {modifiedAt: parseInt(e.modifiedAt, 10)} : {}),
+      };
+    });
+    // Merge: keep local-only log entries (not yet pushed)
+    const remoteLogIds = new Set(remoteLog.map(e => e.id));
+    const localOnlyLog = (state.log||[]).filter(e => e.id && !remoteLogIds.has(e.id));
+
     state.plants = [...plants, ...localOnly];
+    state.log = [...remoteLog, ...localOnlyLog];
     gsSuspendSync = true; saveLocal(); gsSuspendSync = false;
     render();
     setStatus(`${plants.length} plants loaded at ${new Date().toLocaleTimeString()}`, 'ok');
@@ -4132,6 +4156,20 @@ function photosToSheetRows(){
   return rows;
 }
 
+function logToSheetRows(){
+  const header = ['id','plantId','action','date','time','note','value','temp','causedBy','photoKeys','modifiedAt'];
+  const rows = [header];
+  for (const e of (state.log || [])){
+    rows.push([
+      e.id||'', e.plantId||'', e.action||'', e.date||'', e.time||'',
+      e.note||'', String(e.value||''), String(e.temp||''), e.causedBy||'',
+      Array.isArray(e.photoKeys) ? e.photoKeys.join('|') : '',
+      e.modifiedAt ? String(e.modifiedAt) : '',
+    ]);
+  }
+  return rows;
+}
+
 async function gsClearAndWrite(tabName, rows){
   const base = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}`;
   await gsApiFetch(`${base}/values/${encodeURIComponent(tabName)}:clear`, {
@@ -4153,6 +4191,7 @@ async function gsPushNow(){
       gsClearAndWrite('plants', plantsToSheetRows()),
       gsClearAndWrite('plant_tags', tagsToSheetRows()),
       gsClearAndWrite('plant_photos', photosToSheetRows()),
+      gsClearAndWrite('log', logToSheetRows()),
     ]);
     setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
   } catch(e){
