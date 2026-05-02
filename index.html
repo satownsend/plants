@@ -2530,7 +2530,7 @@ function renderPlants(){
     const cellPhotos = photoCount ? String(photoCount) : '';
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
-      <td data-col="name" style="display:flex;align-items:center">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt="">` : ''; })()}<span><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</span></td>
+      <td data-col="name">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt="">` : ''; })()}<a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
