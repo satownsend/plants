@@ -860,14 +860,9 @@
   </div>
   <hr>
   <div>
-    <h2 style="margin:0 0 8px">Google Sheet (source of truth)</h2>
-    <div class="small" style="margin-bottom:6px">Published CSV URL — plants are read from here on load.</div>
-    <input type="text" id="sheetUrlInput" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?...output=csv">
-    <div class="row" style="margin-top:8px;gap:6px">
-      <button id="sheetSaveBtn" class="tiny">Save URL</button>
-      <button id="sheetPullBtn" class="tiny ghost">Pull from sheet now</button>
-    </div>
-    <div class="small" id="sheetStatus" style="margin-top:6px;color:var(--muted)">Not configured.</div>
+    <h2 style="margin:0 0 8px">Google Sheet (data store)</h2>
+    <div class="small" style="margin-bottom:6px">Plants, tags, and photos are stored in a <a href="https://docs.google.com/spreadsheets/d/1Q1kRZG0jjkYF7pCSZXZIgE5B_kCorDovO2I7ATE3vUM/edit" target="_blank">Google Sheet</a>. Data loads automatically.</div>
+    <div class="small" id="sheetStatus" style="margin-top:6px;color:var(--muted)">Not loaded yet.</div>
   </div>
   <hr>
   <div>
@@ -885,16 +880,15 @@
   </div>
   <hr>
   <div>
-    <h2 style="margin:0 0 8px">GitHub sync</h2>
-    <div class="small" style="margin-bottom:6px">Repo: <code>satownsend/our-plants</code> · file: <code>data.json</code></div>
-    <input type="password" id="ghTokenInput" placeholder="Paste fine-grained PAT (Contents: Read and write)">
+    <h2 style="margin:0 0 8px">Google Sheets sync</h2>
+    <div class="small" style="margin-bottom:6px">Data stored in Google Sheets. Sign in to enable editing.</div>
     <div class="row" style="margin-top:8px;gap:6px">
-      <button id="ghSaveTokenBtn" class="tiny">Save token & connect</button>
-      <button id="ghPullBtn" class="tiny ghost">Pull now</button>
-      <button id="ghPushBtn" class="tiny ghost">Push now</button>
-      <button id="ghClearTokenBtn" class="tiny ghost" style="margin-left:auto">Forget token</button>
+      <button id="gsSaveTokenBtn" class="tiny">Sign in with Google</button>
+      <button id="gsPullBtn" class="tiny ghost">Pull now</button>
+      <button id="gsPushBtn" class="tiny ghost">Push now</button>
+      <button id="gsSignOutBtn" class="tiny ghost" style="margin-left:auto">Sign out</button>
     </div>
-    <div class="small" id="ghStatus" style="margin-top:6px;color:var(--muted)">Not connected.</div>
+    <div class="small" id="gsStatus" style="margin-top:6px;color:var(--muted)">Read-only (not signed in).</div>
   </div>
   <hr>
   <div class="row">
@@ -1073,7 +1067,7 @@
 </template>
 
 <p class="small" style="text-align:center;margin-top:30px">
-  Data lives in your browser only. Use Settings → Export to back it up.
+  Data synced with Google Sheets.
 </p>
 
 </div>
@@ -1081,15 +1075,20 @@
 <script>
 /* ---------- storage ---------- */
 const KEY = 'yardDashboard.v4';
-// GitHub sync state (declared up here so save() during init doesn't trip the TDZ)
-const GH = { owner:'satownsend', repo:'our-plants', path:'data.json', branch:'main' };
-const TOKEN_KEY = 'yardDashboard.ghtoken';
-let lastSha = null;
-let syncing = false;
-let syncTimer = null;
-let suspendSync = false;
-function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
-function setToken(t){ if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); }
+// Google Sheets sync state
+const SHEETS_ID = '1Q1kRZG0jjkYF7pCSZXZIgE5B_kCorDovO2I7ATE3vUM';
+const SHEETS_GID = { plants: 0, plant_tags: 1113148227, plant_photos: 396120968 };
+const GS_CLIENT_ID = '936411146633-16fq9oc08auslfprvgbl9bpoafbvo9uk.apps.googleusercontent.com';
+const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const GS_TOKEN_KEY = 'yardDashboard.gsToken';
+let gsSyncing = false;
+let gsSyncTimer = null;
+let gsSuspendSync = false;
+function getGsToken(){
+  try { const t = JSON.parse(localStorage.getItem(GS_TOKEN_KEY)||'null'); if (!t) return null; if (t.expires_at && t.expires_at < Date.now()) return null; return t; } catch(e){ return null; }
+}
+function setGsToken(t){ if (t) localStorage.setItem(GS_TOKEN_KEY, JSON.stringify(t)); else localStorage.removeItem(GS_TOKEN_KEY); }
+function isGsAuthed(){ return !!getGsToken(); }
 const defaultState = {
   settings: {
     city: 'Lilly, PA 15938',
@@ -1174,7 +1173,7 @@ function load(){
   catch(e){ return structuredClone(defaultState) }
 }
 function saveLocal(){ localStorage.setItem(KEY, JSON.stringify(state)); }
-function save(){ saveLocal(); queueSync(); }
+function save(){ saveLocal(); queueGsSync(); }
 let state = load();
 if (!state.plants || !state.plants.length) state.plants = structuredClone(defaultState.plants);
 // Migration: extract leading "$NN" or "$NN.NN" from notes into p.price.
@@ -1680,8 +1679,7 @@ function openSettings(){
   $('#firstFrostInput').value = state.settings.firstFrost || '';
   $('#unitsInput').value = state.settings.units || 'F';
   $('#zoneInput').value = state.settings.zone || '';
-  if (typeof refreshTokenInput === 'function') refreshTokenInput();
-  if (typeof refreshSheetInput === 'function') refreshSheetInput();
+  if (typeof refreshGsStatus === 'function') refreshGsStatus();
   if (typeof refreshR2Input === 'function') refreshR2Input();
   p.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -1691,11 +1689,9 @@ $('#settingsBtn').onclick = ()=>{
   else openSettings();
 };
 $('#syncchip').onclick = ()=>{
-  // If we're in an error state with a pending retry, tapping the chip retries now.
   const chip = $('#syncchip');
-  if (chip.textContent.includes('error') && getToken()){
-    if (pushRetryTimer){ clearTimeout(pushRetryTimer); pushRetryTimer = null; }
-    pushNow();
+  if (chip.textContent.includes('error') && isGsAuthed()){
+    gsPushNow();
     return;
   }
   openSettings();
@@ -3147,7 +3143,7 @@ function startEditSpot(td, id){
   const finish = (commit) => {
     if (done) return; done = true;
     if (commit){
-      // Re-find by id at commit time. A background pullFromRemote may have
+      // Re-find by id at commit time. A background pull may have
       // rebuilt state.plants between click and commit, leaving p0 detached
       // from the array — assigning to p0.spot would never reach sync.
       const cur = state.plants.find(x => x.id === id);
@@ -3583,8 +3579,8 @@ $('#logEditSave').onclick = () => {
     for (const k of e.photoKeys) autoHidePhoto(k);
   }
   // Bump modifiedAt so a later sync from a stale device can't silently revert
-  // this edit. Merges (in pullFromRemote and pushWithRetry) prefer the side
-  // with the larger modifiedAt for matching ids.
+  // this edit. Merges prefer the side with the larger modifiedAt for
+  // matching ids.
   e.modifiedAt = Date.now();
   $('#logEditModal').classList.remove('show');
   // Log changes can't affect the wishlist (wishlist plants don't have log entries shown there).
@@ -3799,13 +3795,11 @@ async function uploadPhoto(plant, file, onStatus){
   if (!plant.photos) plant.photos = [];
   plant.photos.push({ key, date: photoDate, caption: '' });
   saveLocal();
-  // Push immediately so a refresh/pull can't race and overwrite the new photo entry.
-  // If this fails the metadata is still in localStorage; queueSync will retry later.
-  if (getToken()){
+  if (isGsAuthed()){
     if (onStatus) onStatus('Syncing…');
-    try { await pushNow(); } catch(e){ queueSync(); }
+    try { await gsPushNow(); } catch(e){ queueGsSync(); }
   } else {
-    queueSync();
+    queueGsSync();
   }
   return key;
 }
@@ -3932,14 +3926,14 @@ async function recoverPhotosFromR2(onStatus){
   }
   if (restored){
     saveLocal();
-    if (getToken()) { try { await pushNow(); } catch(e){ queueSync(); } }
+    if (isGsAuthed()) { try { await gsPushNow(); } catch(e){ queueGsSync(); } }
     // Photo restore only adds entries to plant.photos — log/brief/frostLog/wishlist unaffected.
     render({plants:1, gallery:1, stats:1});
   }
   return { restored, plantsTouched, totalKeys: allKeys.length, orphanSlugs };
 }
 
-/* ---------- Google Sheet (source of truth for plants) ---------- */
+/* ---------- Google Sheets data layer ---------- */
 function parseCSV(text){
   const rows = []; let row = []; let field = ''; let inQuotes = false; let i = 0;
   while (i < text.length){
@@ -3967,442 +3961,270 @@ function plantSlug(name){
 function normalizeDate(s){
   if (!s) return '';
   s = String(s).trim();
-  // ISO YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
-  // ISO YYYY-MM (month only, default to day 1)
   let m = s.match(/^(\d{4})-(\d{1,2})$/);
   if (m) return `${m[1]}-${m[2].padStart(2,'0')}-01`;
-  // US M/D/YYYY (or MM/DD/YYYY)
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  // US M/YYYY (month + year only, default to day 1) — also handles MM-YYYY
   m = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
   if (m) return `${m[2]}-${m[1].padStart(2,'0')}-01`;
-  // Bare year YYYY (default to Jan 1)
   if (/^\d{4}$/.test(s)) return `${s}-01-01`;
   return '';
 }
-function csvToPlants(rows, existingByName){
-  if (!rows.length) return [];
-  const headers = rows[0].map(h=>(h||'').trim().toLowerCase());
-  const idx = (k) => headers.findIndex(h=>h===k.toLowerCase());
-  // Name column: prefer "common name", fall back to legacy "tree" header
-  let cName = idx('common name');
-  if (cName < 0) cName = idx('tree');
-  const cLatin=idx('latin name'), cType=idx('type'),
-        cDate=idx('date purchased'), cQty=idx('quantity'),
-        cPrice=idx('price'), cAge=idx('years old at purchase'), cSpot=idx('planting location'),
-        cSp=idx('spring color'), cSu=idx('summer color'), cFa=idx('fall color'),
-        cNotes=idx('notes'), cDead=idx('dead'), cWishlist=idx('wishlist');
-  if (cName < 0) throw new Error('Sheet missing required "Common Name" (or legacy "Tree") column header');
-  const plants = [];
-  for (let r=1; r<rows.length; r++){
-    const row = rows[r] || [];
-    const name = (row[cName]||'').trim();
-    if (!name) continue;
-    const latin = cLatin>=0 ? (row[cLatin]||'').trim() : '';
-    // Match by common name first; if that fails, try Latin Name (handles the
-    // "moved old common name into Latin Name" pattern); finally fall back to
-    // fuzzy word-overlap match against existing common names (handles renames
-    // like "Weeping Alaskan Cedar" → "Blue Weeping Alaskan Cedar" where the
-    // old name is preserved as a substring of the new).
-    let existing = existingByName.get(name.toLowerCase())
-      || (latin ? existingByName.get(latin.toLowerCase()) : null);
-    if (!existing){
-      const existingPlants = [...existingByName.values()];
-      const fuzzyId = fuzzyMatchOrphanSlug(plantSlug(name), existingPlants);
-      if (fuzzyId) existing = existingPlants.find(p => p.id === fuzzyId) || null;
-    }
-    existing = existing || {};
-    let price = '';
-    if (cPrice>=0 && row[cPrice]){
-      const m = String(row[cPrice]).match(/[0-9]+(?:\.[0-9]{1,2})?/);
-      if (m) price = parseFloat(m[0]);
-    }
-    const noteParts = [];
-    if (cAge>=0 && row[cAge])     noteParts.push(`Age at purchase: ${row[cAge]}`);
-    if (cSp>=0 && row[cSp])       noteParts.push(`Spring: ${row[cSp]}`);
-    if (cSu>=0 && row[cSu])       noteParts.push(`Summer: ${row[cSu]}`);
-    if (cFa>=0 && row[cFa])       noteParts.push(`Fall: ${row[cFa]}`);
-    if (cNotes>=0 && row[cNotes]) noteParts.push(row[cNotes]);
-    const spot = cSpot>=0 ? (row[cSpot]||'').trim() : '';
-    const isContainer = /\bpot\b|\bcontainer\b|\bhanging\b/i.test(spot);
-    const isDead = cDead>=0
-      ? /^(true|yes|1|dead|x)$/i.test((row[cDead]||'').trim())
-      : !!existing.dead;
-    const isWishlist = cWishlist>=0
-      ? /^(true|yes|1|x)$/i.test((row[cWishlist]||'').trim())
-      : !!existing.wishlist;
-    const category = cType>=0 ? (row[cType]||'').trim() : '';
-    plants.push({
-      id: plantSlug(name),
-      name,
-      type: latin || existing.type || '',
-      category: category || existing.category || '',
-      spot,
-      container: isContainer || !!existing.container,
-      tags: existing.tags || '',
-      notes: noteParts.join('. ').trim(),
-      price: price !== '' ? price : (existing.price || ''),
-      purchased: cDate>=0 ? normalizeDate(row[cDate]) : '',
-      dead: isDead,
-      wishlist: isWishlist,
-      quantity: cQty>=0 ? Math.max(1, parseInt(row[cQty]||'1', 10) || 1) : 1,
-      photos: existing.photos || [],
-    });
-  }
-  return plants;
+// Fetch a single sheet tab as CSV (no auth needed if sheet is "Anyone with the link")
+function sheetCsvUrl(gid){
+  return `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
 }
 
-async function pullFromSheet(){
-  const url = state.settings.sheetCsvUrl;
-  if (!url) return;
+async function fetchSheetTab(gid){
+  const r = await fetch(sheetCsvUrl(gid), {cache:'no-store'});
+  if (!r.ok) throw new Error(`Sheet fetch failed: HTTP ${r.status}`);
+  return parseCSV(await r.text());
+}
+
+function rowsToObjects(rows){
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => (h||'').trim());
+  return rows.slice(1).filter(r => r.some(c => (c||'').trim())).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => { if (h) obj[h] = (r[i]||'').trim(); });
+    return obj;
+  });
+}
+
+async function pullFromSheets(){
   const setStatus = (msg, kind) => {
     const el = $('#sheetStatus');
     if (el){ el.textContent = msg; el.style.color = kind==='err'?'#e8a06a':kind==='ok'?'var(--accent)':'var(--muted)'; }
   };
   try {
-    setStatus('Pulling from sheet…');
-    const r = await fetch(url, {cache:'no-store'});
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    const txt = await r.text();
-    const rows = parseCSV(txt);
-    const existingByName = new Map((state.plants||[]).map(p=>[p.name.toLowerCase(), p]));
-    const newPlants = csvToPlants(rows, existingByName);
-    if (!newPlants.length) throw new Error('No plant rows parsed');
-    // Migrate log entries + photo cross-links: map any old plantId to the new
-    // slug. Match by common name first, fall back to Latin Name (for plants
-    // that were renamed and had their old common name moved into Latin Name).
-    const oldIdToName = new Map((state.plants||[]).map(p=>[p.id, (p.name||'').toLowerCase()]));
-    const newNameToId = new Map();
-    for (const p of newPlants){
-      newNameToId.set((p.name||'').toLowerCase(), p.id);
-      if (p.type) newNameToId.set(p.type.toLowerCase(), p.id);   // Latin Name fallback
+    setStatus('Loading from Google Sheets…');
+    const [plantsRows, tagsRows, photosRows] = await Promise.all([
+      fetchSheetTab(SHEETS_GID.plants),
+      fetchSheetTab(SHEETS_GID.plant_tags),
+      fetchSheetTab(SHEETS_GID.plant_photos),
+    ]);
+    const rawPlants = rowsToObjects(plantsRows);
+    const rawTags = rowsToObjects(tagsRows);
+    const rawPhotos = rowsToObjects(photosRows);
+
+    // Build tags lookup: plant_id -> comma-separated tags
+    const tagsByPlant = new Map();
+    for (const t of rawTags){
+      const id = t.plant_id;
+      if (!id) continue;
+      tagsByPlant.set(id, (tagsByPlant.get(id) || []).concat(t.tag));
     }
-    const remap = (oldId) => {
-      const nm = oldIdToName.get(oldId);
-      return nm ? (newNameToId.get(nm) || null) : null;
-    };
-    state.log = (state.log||[]).map(e => {
-      const newId = remap(e.plantId);
-      return newId ? {...e, plantId:newId} : e;
+
+    // Build photos lookup: plant_id -> array of photo objects
+    const photosByPlant = new Map();
+    for (const ph of rawPhotos){
+      const id = ph.plant_id;
+      if (!id) continue;
+      if (!photosByPlant.has(id)) photosByPlant.set(id, []);
+      const also = (ph.alsoIn||'').split('|').filter(Boolean);
+      photosByPlant.get(id).push({
+        key: ph.key || '',
+        date: ph.date || '',
+        caption: ph.caption || '',
+        ...(ph.hideFromGallery === 'TRUE' ? {hideFromGallery: true} : {}),
+        ...(also.length ? {alsoIn: also} : {}),
+      });
+    }
+
+    // Preserve local-only photo additions (uploaded but not yet pushed to sheets)
+    const localById = new Map((state.plants||[]).map(p => [p.id, p]));
+
+    // Assemble plants
+    const plants = rawPlants.map(rp => {
+      const id = rp.id;
+      const localPlant = localById.get(id);
+      const remotePhotos = photosByPlant.get(id) || [];
+      const remoteKeys = new Set(remotePhotos.map(ph => ph.key));
+      const localExtras = (localPlant?.photos || []).filter(ph => ph.key && !remoteKeys.has(ph.key));
+      return {
+        id,
+        name: rp.name || '',
+        type: rp.type || '',
+        category: rp.category || '',
+        spot: rp.spot || '',
+        container: rp.container === 'TRUE',
+        notes: rp.notes || '',
+        price: rp.price ? parseFloat(rp.price) : '',
+        purchased: rp.purchased || '',
+        dead: rp.dead === 'TRUE',
+        wishlist: rp.wishlist === 'TRUE',
+        quantity: parseInt(rp.quantity, 10) || 1,
+        tags: (tagsByPlant.get(id) || []).join(','),
+        photos: [...remotePhotos, ...localExtras],
+        // Preserve local-only fields (mapPos, etc.)
+        ...(localPlant?.mapPos ? {mapPos: localPlant.mapPos} : {}),
+      };
     });
-    // Also remap photo cross-links (photo.alsoIn[]) on the existing plants —
-    // do this BEFORE we replace state.plants so the carry-over plants keep
-    // their links pointing at the new ids.
-    for (const p of (state.plants||[])){
-      for (const ph of (p.photos||[])){
-        if (Array.isArray(ph.alsoIn) && ph.alsoIn.length){
-          ph.alsoIn = ph.alsoIn.map(id => remap(id) || id);
-        }
-      }
-    }
-    state.plants = newPlants;
-    state.settings.sheetLastPull = new Date().toISOString();
-    save();   // triggers GitHub push too
+
+    // Keep plants that exist locally but not in the sheet (locally added, not yet pushed)
+    const remoteIds = new Set(plants.map(p => p.id));
+    const localOnly = (state.plants||[]).filter(p => !remoteIds.has(p.id));
+
+    state.plants = [...plants, ...localOnly];
+    gsSuspendSync = true; saveLocal(); gsSuspendSync = false;
     render();
-    setStatus(`${newPlants.length} plants pulled at ${new Date().toLocaleTimeString()}`, 'ok');
+    setStatus(`${plants.length} plants loaded at ${new Date().toLocaleTimeString()}`, 'ok');
+    setSyncStatus(`loaded ${new Date().toLocaleTimeString()}`, 'ok');
   } catch(e){
+    console.error('[sheets] pull failed:', e);
     setStatus('Error: '+e.message, 'err');
+    setSyncStatus('error: '+e.message.slice(0,60), 'err');
   }
 }
 
-/* ---------- GitHub sync ---------- */
-// (GH, TOKEN_KEY, getToken, setToken, lastSha, syncing, syncTimer, suspendSync hoisted to top)
-
-function utf8b64(s){ return btoa(unescape(encodeURIComponent(s))); }
-function b64utf8(s){ return decodeURIComponent(escape(atob(s.replace(/\n/g,'')))); }
-
-function syncBlob(){
-  return { plants: state.plants, log: state.log, settings: state.settings };
-}
-
-async function ghFetch(){
-  const t = getToken(); if (!t) throw new Error('no token');
-  // Cache-bust via URL only. NOTE: do NOT add Cache-Control: no-cache as a
-  // request header — GitHub's API CORS policy doesn't allow it, and the
-  // preflight rejection causes "Failed to fetch" with no actual server hit.
-  // The URL timestamp + fetch's cache: 'no-store' is enough.
-  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}?ref=${GH.branch}&_=${Date.now()}`;
-  const r = await fetch(url, {
-    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json'},
-    cache: 'no-store',
-  });
-  if (r.status === 404) return {sha:null, data:null};
-  if (!r.ok){ console.warn('[sync] GET failed', r.status); throw new Error(`fetch ${r.status}`); }
-  const j = await r.json();
-  console.debug('[sync] GET data.json sha:', j.sha);
-  return { sha: j.sha, data: JSON.parse(b64utf8(j.content)) };
-}
-
-async function ghPut(blob, sha){
-  const t = getToken(); if (!t) throw new Error('no token');
-  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${GH.path}`;
-  const body = {
-    message: `yard: update ${new Date().toISOString().slice(0,16).replace('T',' ')}`,
-    content: utf8b64(JSON.stringify(blob, null, 2)),
-    branch: GH.branch,
-  };
-  if (sha) body.sha = sha;
-  console.debug('[sync] PUT data.json with sha:', sha || '(none)');
-  const r = await fetch(url, {
-    method:'PUT',
-    headers:{Authorization:`token ${t}`, Accept:'application/vnd.github+json','Content-Type':'application/json'},
-    body: JSON.stringify(body),
-  });
+// --- Sheets API write (requires OAuth) ---
+async function gsApiFetch(url, opts = {}){
+  const token = getGsToken();
+  if (!token) throw new Error('Not signed in');
+  const headers = { Authorization: `Bearer ${token.access_token}`, ...(opts.headers || {}) };
+  const r = await fetch(url, { ...opts, headers });
   if (!r.ok){
-    const err = await r.json().catch(()=>({}));
-    console.warn('[sync] PUT failed', r.status, err);
-    throw new Error(`PUT ${r.status}: ${err.message||''}`);
+    const txt = await r.text().catch(()=>'');
+    throw new Error(`Sheets API ${r.status}: ${txt.slice(0,200)}`);
   }
-  const j = await r.json();
-  return j.content.sha;
+  return r.json();
+}
+
+function plantsToSheetRows(){
+  const header = ['id','name','type','category','spot','container','notes','price','purchased','dead','wishlist','quantity'];
+  const rows = [header];
+  for (const p of (state.plants || [])){
+    rows.push([
+      p.id, p.name||'', p.type||'', p.category||'', p.spot||'',
+      p.container ? 'TRUE' : 'FALSE', p.notes||'',
+      p.price !== '' && p.price !== undefined ? String(p.price) : '',
+      p.purchased||'', p.dead ? 'TRUE' : 'FALSE',
+      p.wishlist ? 'TRUE' : 'FALSE', String(p.quantity||1),
+    ]);
+  }
+  return rows;
+}
+
+function tagsToSheetRows(){
+  const header = ['plant_id','tag'];
+  const rows = [header];
+  for (const p of (state.plants || [])){
+    for (const tag of (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean)){
+      rows.push([p.id, tag]);
+    }
+  }
+  return rows;
+}
+
+function photosToSheetRows(){
+  const header = ['plant_id','key','date','caption','hideFromGallery','alsoIn'];
+  const rows = [header];
+  for (const p of (state.plants || [])){
+    for (const ph of (p.photos || [])){
+      rows.push([
+        p.id, ph.key||'', ph.date||'', ph.caption||'',
+        ph.hideFromGallery ? 'TRUE' : 'FALSE',
+        (ph.alsoIn||[]).join('|'),
+      ]);
+    }
+  }
+  return rows;
+}
+
+async function gsClearAndWrite(tabName, rows){
+  const base = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}`;
+  await gsApiFetch(`${base}/values/${encodeURIComponent(tabName)}:clear`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}',
+  });
+  await gsApiFetch(`${base}/values/${encodeURIComponent(tabName + '!A1')}?valueInputOption=RAW`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({values: rows}),
+  });
+}
+
+async function gsPushNow(){
+  if (!isGsAuthed() || gsSyncing) return;
+  gsSyncing = true;
+  try {
+    setSyncStatus('pushing…');
+    await Promise.all([
+      gsClearAndWrite('plants', plantsToSheetRows()),
+      gsClearAndWrite('plant_tags', tagsToSheetRows()),
+      gsClearAndWrite('plant_photos', photosToSheetRows()),
+    ]);
+    setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
+  } catch(e){
+    console.error('[sheets] push failed:', e);
+    setSyncStatus('error: '+e.message.slice(0,60), 'err');
+  } finally { gsSyncing = false; }
+}
+
+function queueGsSync(){
+  if (gsSuspendSync || !isGsAuthed()) return;
+  clearTimeout(gsSyncTimer);
+  gsSyncTimer = setTimeout(gsPushNow, 2000);
 }
 
 function setSyncStatus(label, kind){
   const chip = $('#syncchip');
-  const status = $('#ghStatus');
+  const status = $('#gsStatus');
   chip.textContent = '⟳ ' + label;
   chip.style.background = kind==='ok' ? '#1f3a25' : kind==='err' ? '#3a2418' : 'var(--chip)';
   chip.style.color = kind==='ok' ? 'var(--accent)' : kind==='err' ? '#e8a06a' : 'var(--ink-soft)';
   if (status) status.textContent = label;
 }
 
-async function pullFromRemote(){
-  if (!getToken() || syncing) return;
-  // Defer if a local push is queued — the merge logic doesn't field-merge
-  // plants (only photos), so a pull would clobber any unsynced local edits
-  // like the wishlist Planned Location inline edit. Defer too while the user
-  // is actively typing in any input/textarea, so a periodic pull doesn't
-  // destroy the in-progress edit by re-rendering its cell.
-  if (syncTimer) return;
-  const ae = document.activeElement;
-  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
-  syncing = true;
-  try {
-    setSyncStatus('pulling…');
-    const remote = await ghFetch();
-    if (remote && remote.data){
-      // Merge log: union by id, preferring local for matching ids so user edits
-      // (which keep the same id but mutate fields) don't get clobbered by the
-      // older remote copy on auto-pull.
-      const localLogById = new Map((state.log||[]).map(e => [e.id, e]));
-      const remoteIds = new Set((remote.data.log||[]).map(e=>e.id));
-      const localOnly = (state.log||[]).filter(e=>e.id && !remoteIds.has(e.id));
-      // hadLocalPending: any local-only entries (new) OR any local edits that differ from remote.
-      const hadLocalEdits = (remote.data.log||[]).some(re => {
-        const le = localLogById.get(re.id);
-        return le && JSON.stringify(le) !== JSON.stringify(re);
-      });
-      const hadLocalPending = localOnly.length > 0 || hadLocalEdits;
-      // Photo-preserving plant merge: take remote plant fields, but union photos by key
-      // so unpushed local photo additions survive a pull.
-      const localById = new Map((state.plants||[]).map(p=>[p.id, p]));
-      const localPhotoPending = [];
-      const mergedPlants = (remote.data.plants || []).map(rp => {
-        const lp = localById.get(rp.id);
-        if (!lp) return rp;
-        const remotePhotos = rp.photos || [];
-        const remoteKeys = new Set(remotePhotos.map(ph => ph.key));
-        const extraLocal = (lp.photos || []).filter(ph => ph.key && !remoteKeys.has(ph.key));
-        if (extraLocal.length) localPhotoPending.push(rp.id);
-        return { ...rp, photos: [...remotePhotos, ...extraLocal] };
-      });
-      // Plants that exist locally but not remotely — keep them (they were never pushed)
-      const remoteIdSet = new Set((remote.data.plants||[]).map(p=>p.id));
-      const localOnlyPlants = (state.plants||[]).filter(p => !remoteIdSet.has(p.id));
-      state.plants = remote.data.plants ? [...mergedPlants, ...localOnlyPlants] : state.plants;
-      // Build merged log: for each remote entry, pick the side with the more
-      // recent modifiedAt. Two extra protections against multi-tab races where
-      // a stale tab would otherwise overwrite a newer push:
-      //   1. If only remote has modifiedAt (le is pre-fix legacy), remote is
-      //      definitively newer — use remote regardless of how stale.
-      //   2. On a true tie (same or both-missing modifiedAt), prefer the side
-      //      with MORE photoKeys. Damage-photo links are additive; the side
-      //      with the longer array is almost always the correct one.
-      const mergedRemoteLog = (remote.data.log||[]).map(re => {
-        const le = localLogById.get(re.id);
-        if (!le) return re;
-        const lt = Number(le.modifiedAt) || 0;
-        const rt = Number(re.modifiedAt) || 0;
-        if (rt && !lt) return re;
-        if (rt > lt) return re;
-        if (lt > rt) return le;
-        // Tie — prefer the entry with more photoKeys (additive data tie-break)
-        const reN = Array.isArray(re.photoKeys) ? re.photoKeys.length : 0;
-        const leN = Array.isArray(le.photoKeys) ? le.photoKeys.length : 0;
-        if (reN > leN) return re;
-        return le;
-      });
-      state.log = [...mergedRemoteLog, ...localOnly];
-      const hadLocalPhotoPending = localPhotoPending.length > 0;
-      const remoteSettings = remote.data.settings || {};
-      state.settings = {...state.settings, ...remoteSettings};
-      // re-pin hardcoded location + R2 config
-      state.settings.city = 'Lilly, PA 15938';
-      state.settings.lat = 40.4238;
-      state.settings.lon = -78.6231;
-      state.settings.r2 = {
-        enabled: true,
-        bucket: 'plant-photos',
-        accountId: '5321847b835f166ceacebf2c8c142610',
-        publicUrl: 'https://pub-59a926166fd84970bea75caf38a52d27.r2.dev',
-      };
-      lastSha = remote.sha;
-      suspendSync = true; saveLocal(); suspendSync = false;
-      render();
-      setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
-      if (hadLocalPending || hadLocalPhotoPending) setTimeout(pushNow, 200);
-    } else {
-      // First time — push current state up directly (don't call pushNow, it'd re-enter guard)
-      setSyncStatus('pushing initial…');
-      try {
-        const sha = await ghPut(syncBlob(), null);
-        lastSha = sha;
-      } catch(e){
-        // If the file actually existed under a race, fall back to merge-and-push
-        if (/\b409\b/.test(e.message) || /\b422\b/.test(e.message)){
-          await pushWithRetry(2);
-        } else throw e;
-      }
-      suspendSync = true; saveLocal(); suspendSync = false;
-      setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
-    }
-  } catch(e){
-    setSyncStatus('error: '+e.message, 'err');
-  } finally { syncing = false; }
+// --- Google OAuth (implicit grant for browser apps) ---
+function gsSignIn(){
+  const redirect = location.origin + location.pathname;
+  const params = new URLSearchParams({
+    client_id: GS_CLIENT_ID,
+    redirect_uri: redirect,
+    response_type: 'token',
+    scope: GS_SCOPES,
+    include_granted_scopes: 'true',
+  });
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
 }
 
-let pushRetryTimer = null;
-async function pushNow(){
-  if (!getToken() || syncing) return;
-  syncing = true;
-  if (pushRetryTimer){ clearTimeout(pushRetryTimer); pushRetryTimer = null; }
-  try {
-    setSyncStatus('pushing…');
-    await pushWithRetry(5);
-    lastSha = lastSha; // set inside pushWithRetry
-    suspendSync = true; saveLocal(); suspendSync = false;
-    setSyncStatus(`synced ${new Date().toLocaleTimeString()}`, 'ok');
-  } catch(e){
-    // Local data is safe in localStorage. Schedule a background retry so the
-    // sync recovers without the user having to make another change. Click the
-    // chip (or "Push now" in Settings) to retry immediately.
-    console.error('[sync] pushNow failed:', e);
-    const short = (e && e.message ? e.message : String(e)).replace(/^PUT\s*/, '').slice(0, 80);
-    setSyncStatus(`error: ${short} · tap to retry`, 'err');
-    pushRetryTimer = setTimeout(() => { pushRetryTimer = null; pushNow(); }, 30000);
-  } finally { syncing = false; }
+function gsHandleRedirect(){
+  const hash = location.hash.slice(1);
+  if (!hash || !hash.includes('access_token')) return false;
+  const params = new URLSearchParams(hash);
+  const token = {
+    access_token: params.get('access_token'),
+    expires_at: Date.now() + (parseInt(params.get('expires_in'),10)||3600) * 1000,
+  };
+  setGsToken(token);
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
 }
 
-async function pushWithRetry(triesLeft, useOptimistic = true){
-  // Optimistic path: PUT with our cached lastSha (the sha returned by our last
-  // successful PUT). GitHub Contents API can briefly return stale SHAs after a
-  // write, so an immediate refetch can yield an outdated sha and trigger a 409
-  // even when nobody else is writing. Using lastSha bypasses the read-side cache.
-  if (useOptimistic && lastSha){
-    const blob = syncBlob();
-    try {
-      const newSha = await ghPut(blob, lastSha);
-      lastSha = newSha;
-      return;
-    } catch(e){
-      if (/\b409\b/.test(e.message) || /\b422\b/.test(e.message)){
-        // Sha actually drifted (real concurrent writer, or first run with a
-        // wrong cached sha) — fall through to the pessimistic merge path.
-      } else {
-        throw e;
-      }
-    }
-  }
-  // Pessimistic path: refetch sha, merge log, PUT. For matching ids, take the
-  // side with the larger modifiedAt — protects against this device having a
-  // stale entry that would otherwise overwrite a newer remote edit.
-  const remote = await ghFetch();
-  let mergedLog = state.log;
-  if (remote && remote.data && remote.data.log){
-    const localById = new Map((state.log||[]).map(e => [e.id, e]));
-    const localIds = new Set(localById.keys());
-    const remoteOnly = remote.data.log.filter(e => e.id && !localIds.has(e.id));
-    const localResolved = (state.log||[]).map(le => {
-      const re = remote.data.log.find(r => r.id === le.id);
-      if (!re) return le;
-      const lt = Number(le.modifiedAt) || 0;
-      const rt = Number(re.modifiedAt) || 0;
-      // Same multi-tab protections as pullFromRemote — see comments there.
-      if (rt && !lt) return re;
-      if (rt > lt) return re;
-      if (lt > rt) return le;
-      const reN = Array.isArray(re.photoKeys) ? re.photoKeys.length : 0;
-      const leN = Array.isArray(le.photoKeys) ? le.photoKeys.length : 0;
-      if (reN > leN) return re;
-      return le;
-    });
-    mergedLog = [...remoteOnly, ...localResolved];
-  }
-  state.log = mergedLog;
-  const blob = syncBlob();
-  try {
-    const newSha = await ghPut(blob, remote ? remote.sha : null);
-    lastSha = newSha;
-  } catch(e){
-    if (/\b409\b/.test(e.message) && triesLeft > 1){
-      // Backoff, then retry pessimistic path (don't try optimistic — sha is known stale).
-      const backoffMs = 250 * (6 - triesLeft);
-      await new Promise(r => setTimeout(r, backoffMs));
-      return pushWithRetry(triesLeft - 1, false);
-    }
-    throw e;
-  }
-}
-
-function queueSync(){
-  if (suspendSync || !getToken()) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(pushNow, 1500);
-}
-
-// Settings panel handlers
-function refreshTokenInput(){
-  const t = getToken();
-  $('#ghTokenInput').value = t ? '••••••••' + t.slice(-4) : '';
-  if (t) setSyncStatus('idle', 'ok');
-  else setSyncStatus('sync: off');
-}
-$('#ghSaveTokenBtn').onclick = async ()=>{
-  const v = $('#ghTokenInput').value.trim();
-  if (!v || v.startsWith('•')) { alert('Paste a fresh token first.'); return; }
-  setToken(v); refreshTokenInput();
-  await pullFromRemote();
-  if (state.settings.sheetCsvUrl) await pullFromSheet();
-};
-$('#ghPullBtn').onclick = pullFromRemote;
-$('#ghPushBtn').onclick = pushNow;
-$('#ghClearTokenBtn').onclick = ()=>{
-  if (!confirm('Forget the GitHub token on this device? (Repo data stays.)')) return;
-  setToken(''); refreshTokenInput(); setSyncStatus('sync: off');
-};
-
-// Sheet sync handlers
-function refreshSheetInput(){
-  const el = $('#sheetUrlInput'); if (!el) return;
-  el.value = state.settings.sheetCsvUrl || '';
-  const status = $('#sheetStatus');
-  if (state.settings.sheetCsvUrl){
-    const last = state.settings.sheetLastPull;
-    status.textContent = last ? `Last pull: ${new Date(last).toLocaleString()}` : 'Configured but not yet pulled.';
+function refreshGsStatus(){
+  if (isGsAuthed()){
+    setSyncStatus('signed in', 'ok');
+    $('#gsSaveTokenBtn').textContent = 'Signed in ✓';
+    $('#gsSaveTokenBtn').disabled = true;
   } else {
-    status.textContent = 'Not configured.';
+    setSyncStatus('read-only', '');
+    $('#gsSaveTokenBtn').textContent = 'Sign in with Google';
+    $('#gsSaveTokenBtn').disabled = false;
   }
 }
-$('#sheetSaveBtn').onclick = async ()=>{
-  const v = $('#sheetUrlInput').value.trim();
-  state.settings.sheetCsvUrl = v;
-  save();
-  refreshSheetInput();
-  if (v) await pullFromSheet();
+
+$('#gsSaveTokenBtn').onclick = gsSignIn;
+$('#gsPullBtn').onclick = pullFromSheets;
+$('#gsPushBtn').onclick = gsPushNow;
+$('#gsSignOutBtn').onclick = ()=>{
+  if (!confirm('Sign out? You can still view plants but edits won\'t sync.')) return;
+  setGsToken(null); refreshGsStatus(); setSyncStatus('read-only', '');
 };
-$('#sheetPullBtn').onclick = pullFromSheet;
+
+/* ---------- (GitHub sync removed — data now lives in Google Sheets) ---------- */
+
+
 
 // R2 settings handlers
 function refreshR2Input(){
@@ -4697,39 +4519,12 @@ function renderFrostLog(){
 }
 
 /* ---------- Yard map ---------- */
-// Image lives in the private our-plants repo. We fetch it via the GitHub API
-// using the same token that data sync uses, then keep a blob URL in memory.
-const YARD_MAP_PATH = 'yard-map.jpg';
 let ympEditing = false;
 let ympSelectedId = null;
 let ympSuppressClick = false;
-let ympMapBlobUrl = null;
-let ympMapStatus = 'idle'; // idle | loading | loaded | no-token | error
-
-async function ensureYardMapLoaded(){
-  if (ympMapBlobUrl || ympMapStatus === 'loading') return;
-  if (state.settings && state.settings.yardMap) return; // override in use, no fetch
-  const token = getToken();
-  if (!token){ ympMapStatus = 'no-token'; return; }
-  ympMapStatus = 'loading';
-  try {
-    const r = await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${YARD_MAP_PATH}?ref=${GH.branch}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw' }
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const blob = await r.blob();
-    ympMapBlobUrl = URL.createObjectURL(blob);
-    ympMapStatus = 'loaded';
-  } catch(e){
-    console.warn('[yard-map] load failed', e);
-    ympMapStatus = 'error';
-  }
-  renderYardMap();
-}
 
 function getYardMapUrl(){
-  if (state.settings && state.settings.yardMap) return state.settings.yardMap;
-  return ympMapBlobUrl;
+  return (state.settings && state.settings.yardMap) || null;
 }
 
 function renderYardMap(){
@@ -4742,14 +4537,7 @@ function renderYardMap(){
 
   const url = getYardMapUrl();
   if (!url){
-    // Trigger a load attempt; the function bails if already loading or no token.
-    ensureYardMapLoaded();
-    const msg = ympMapStatus === 'no-token'
-      ? 'Yard map lives in the private repo. Add your GitHub token in Settings to load it.'
-      : ympMapStatus === 'error'
-        ? 'Could not load yard map from the private repo. Check your token has repo scope.'
-        : 'Loading yard map…';
-    wrap.innerHTML = `<div style="padding:24px;color:var(--muted);text-align:center;line-height:1.4">${escapeHtml(msg)}</div>`;
+    wrap.innerHTML = `<div style="padding:24px;color:var(--muted);text-align:center;line-height:1.4">No yard map configured. Set settings.yardMap to an image URL.</div>`;
     return;
   }
 
@@ -4882,17 +4670,11 @@ function render(slices){
 }
 render();
 fetchForecast();
-refreshTokenInput();
-refreshSheetInput();
 refreshR2Input();
+gsHandleRedirect();
+refreshGsStatus();
 (async ()=>{
-  if (getToken()){
-    await pullFromRemote();
-    setInterval(pullFromRemote, 60000);
-  }
-  if (state.settings.sheetCsvUrl){
-    await pullFromSheet();
-  }
+  await pullFromSheets();
 })();
 </script>
 
