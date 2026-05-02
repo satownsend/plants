@@ -34,7 +34,7 @@ Hit print and it generates a clean PDF — summary stats up top, full plant tabl
 
 ### Sync everywhere
 
-Data lives in a private GitHub repo as a single JSON file. Open the page on my phone or laptop and it pulls the latest. There's also a Google Sheet I can use as the source of truth — pull from the sheet and it merges in.
+Data lives in a Google Sheet with normalized tabs (plants, tags, photos, log). The page loads data from the public sheet on startup — no sign-in needed to view. Sign in with Google to enable editing; changes push back to the sheet automatically.
 
 ### The polish
 
@@ -48,10 +48,9 @@ Data lives in a private GitHub repo as a single JSON file. Open the page on my p
 
 Single `index.html` file, no build step. Plain JavaScript, plain CSS. Hosted on GitHub Pages.
 
-- **Data**: a single `data.json` in a private companion repo ([satownsend/our-plants](https://github.com/satownsend/our-plants)), read/written via the GitHub Contents API using a fine-grained PAT stored in `localStorage`.
+- **Data**: a [Google Sheet](https://docs.google.com/spreadsheets/d/1Q1kRZG0jjkYF7pCSZXZIgE5B_kCorDovO2I7ATE3vUM/edit) with four normalized tabs (`plants`, `plant_tags`, `plant_photos`, `log`). Reads use the public CSV export (no auth). Writes use the Sheets API via Google OAuth (implicit grant).
 - **Photos**: Cloudflare R2 bucket served from a public `pub-…r2.dev` URL.
 - **Weather**: NWS (`api.weather.gov`) primary, Open-Meteo fallback.
-- **Yard map**: stored alongside the data in the private repo, fetched as a blob URL using the same token.
-- **Source-of-truth ingest**: optional Google Sheet (CSV export) sync for bulk plant edits.
+- **Yard map**: hosted in the same R2 bucket as the photos.
 
 It started as a way to remember "wait, what's the cultivar of that maple again?" and turned into the thing I check first thing in the morning before deciding whether to go water something.
