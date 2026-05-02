@@ -2637,6 +2637,8 @@ $$('#plantTable th[data-sort]').forEach(th=>{
 $('#plantTable').addEventListener('click', e=>{
   const btn = e.target.closest('button[data-edit]');
   if (btn){ openEdit(btn.dataset.edit); return; }
+  const thumb = e.target.closest('.plant-thumb');
+  if (thumb){ const tr = thumb.closest('tr[data-id]'); if (tr) openInfo(tr.dataset.id); return; }
   const link = e.target.closest('a[data-info]');
   if (link){ e.preventDefault(); openInfo(link.dataset.info); return; }
 });
