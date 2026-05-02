@@ -360,7 +360,6 @@
   body.view-only .edit-row,
   body.view-only #lightboxDelete,
   body.view-only #lightboxCaption,
-  body.view-only #lightboxDate,
   body.view-only #logEditDelete,
   body.view-only [data-act="delete"],
   body.view-only #photoUploadInput + span,
@@ -923,7 +922,7 @@
     <!-- Image fills remaining space; flex:1 + min-height:0 lets it shrink so the meta panel below always renders. -->
     <img id="lightboxImg" style="flex:1 1 auto;min-height:0;width:100%;object-fit:contain;border-radius:8px;background:#0a0a0a">
     <div id="lightboxMeta" style="flex:none;color:#ddd;font-size:13px;text-align:center;max-width:100%;padding:0 4px">
-      <input type="date" id="lightboxDate" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:5px 10px;font-weight:600;text-align:center;color-scheme:dark">
+      <span id="lightboxDate" style="display:inline-block;color:#fff;font-weight:600;padding:5px 10px"></span>
       <input type="text" id="lightboxCaption" placeholder="add caption…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 10px;margin-top:6px;width:280px;max-width:90vw">
       <div id="lightboxAlsoIn" style="margin-top:8px;color:#ccc;font-size:12px;display:flex;flex-wrap:wrap;gap:5px;justify-content:center;align-items:center;max-width:100%"></div>
       <label id="lightboxHideRow" style="margin-top:8px;color:#ccc;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer">
@@ -2827,7 +2826,7 @@ function showLightboxIdx(){
   lbImg.onerror = () => { lbImg.alt = 'Photo not found — it may have been deleted from storage.'; };
   lbImg.alt = '';
   lbImg.src = r2PublicUrl(ph.key);
-  $('#lightboxDate').value = ph.date || '';
+  $('#lightboxDate').textContent = ph.date || '';
   $('#lightboxCaption').value = ph.caption || '';
   // Read hideFromGallery off the canonical photo entry (so a linked-view
   // shows the same state as the owner's view).
@@ -2899,18 +2898,6 @@ $('#lightboxCaption').addEventListener('change', ()=>{
   target.caption = $('#lightboxCaption').value;
   ph.caption = target.caption;
   save();
-});
-$('#lightboxDate').addEventListener('change', ()=>{
-  const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
-  const { target } = getCanonicalPhoto(ph);
-  if (!target) return;
-  const newDate = $('#lightboxDate').value;
-  if (!newDate) return;
-  target.date = newDate;
-  ph.date = newDate;
-  save();
-  const cur = state.plants.find(p => p.id === currentInfoPlantId);
-  if (cur) renderPhotos(cur);
 });
 $('#lightboxHideFromGallery').addEventListener('change', ()=>{
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
