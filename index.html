@@ -364,6 +364,7 @@
   body.view-only #addPlantBtn,
   body.view-only .edit-row,
   body.view-only #lightboxDelete,
+  body.view-only #lightboxThumb,
   body.view-only #lightboxCaption,
   body.view-only #logEditDelete,
   body.view-only [data-act="delete"],
@@ -560,6 +561,7 @@
     /* Edit row inside card layout */
     tr.edit-row td{padding:8px 0 0}
     tr.edit-row td:last-child{position:static}
+    #lightboxThumb{display:none!important}
     /* Modal mobile */
     .modal-back{padding:8px}
     .modal{padding:18px 18px 22px;border-radius:12px}
@@ -939,6 +941,7 @@
       <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
         <button id="lightboxPrev" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">‹ Prev</button>
         <button id="lightboxNext" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">Next ›</button>
+        <button id="lightboxThumb" class="ghost tiny" style="color:#fff;border-color:rgba(255,255,255,.2)">Set as thumbnail</button>
         <button id="lightboxDelete" class="ghost tiny" style="color:#f59a8a;border-color:rgba(245,154,138,.3)">Delete</button>
       </div>
     </div>
@@ -2535,7 +2538,7 @@ function renderPlants(){
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
       <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
-      <td data-col="thumb">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<span class="thumb-wrap"><img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""><img class="thumb-preview" data-src="${r2PublicUrl(ph.key)}" alt=""></span>` : ''; })()}</td>
+      <td data-col="thumb">${(()=>{ const photos = (p.photos||[]); const ph = (p.thumbKey && photos.find(x=>x.key===p.thumbKey)) || photos.find(x=>!x.hideFromGallery); return ph ? `<span class="thumb-wrap"><img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""><img class="thumb-preview" data-src="${r2PublicUrl(ph.key)}" alt=""></span>` : ''; })()}</td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
@@ -2855,6 +2858,10 @@ function showLightboxIdx(){
   // shows the same state as the owner's view).
   const { target } = getCanonicalPhoto(ph);
   $('#lightboxHideFromGallery').checked = !!(target && target.hideFromGallery);
+  const curPlant = state.plants.find(x=>x.id===currentInfoPlantId);
+  const thumbBtn = $('#lightboxThumb');
+  if (curPlant && curPlant.thumbKey === ph.key){ thumbBtn.textContent = '✓ Thumbnail'; thumbBtn.disabled = true; }
+  else { thumbBtn.textContent = 'Set as thumbnail'; thumbBtn.disabled = false; }
   renderLightboxAlsoIn(ph);
 }
 function renderLightboxAlsoIn(ph){
@@ -2914,6 +2921,14 @@ $('#lightboxClose').onclick = ()=> $('#lightbox').classList.remove('show');
 $('#lightbox').addEventListener('click', e=>{ if (e.target.id==='lightbox') $('#lightbox').classList.remove('show'); });
 $('#lightboxPrev').onclick = ()=>{ const n = (state._lightboxPhotos||[]).length; lightboxIdx = (lightboxIdx - 1 + n) % n; showLightboxIdx(); };
 $('#lightboxNext').onclick = ()=>{ const n = (state._lightboxPhotos||[]).length; lightboxIdx = (lightboxIdx + 1) % n; showLightboxIdx(); };
+$('#lightboxThumb').onclick = ()=>{
+  const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
+  const p = state.plants.find(x=>x.id===currentInfoPlantId); if (!p) return;
+  p.thumbKey = ph.key;
+  save(); renderPlants();
+  $('#lightboxThumb').textContent = '✓ Thumbnail set';
+  setTimeout(()=>{ $('#lightboxThumb').textContent = 'Set as thumbnail'; }, 1500);
+};
 $('#lightboxCaption').addEventListener('change', ()=>{
   const ph = (state._lightboxPhotos||[])[lightboxIdx]; if (!ph) return;
   const { target } = getCanonicalPhoto(ph);
@@ -4069,6 +4084,7 @@ async function pullFromSheets(){
         quantity: parseInt(rp.quantity, 10) || 1,
         tags: (tagsByPlant.get(id) || []).join(','),
         photos: [...remotePhotos, ...localExtras],
+        thumbKey: rp.thumbKey || '',
         // Preserve local-only fields (mapPos, etc.)
         ...(localPlant?.mapPos ? {mapPos: localPlant.mapPos} : {}),
       };
@@ -4129,7 +4145,7 @@ async function gsApiFetch(url, opts = {}){
 }
 
 function plantsToSheetRows(){
-  const header = ['id','name','type','category','spot','container','notes','price','purchased','dead','wishlist','quantity'];
+  const header = ['id','name','type','category','spot','container','notes','price','purchased','dead','wishlist','quantity','thumbKey'];
   const rows = [header];
   for (const p of (state.plants || [])){
     rows.push([
@@ -4138,6 +4154,7 @@ function plantsToSheetRows(){
       p.price !== '' && p.price !== undefined ? String(p.price) : '',
       p.purchased||'', p.dead ? 'TRUE' : 'FALSE',
       p.wishlist ? 'TRUE' : 'FALSE', String(p.quantity||1),
+      p.thumbKey||'',
     ]);
   }
   return rows;
