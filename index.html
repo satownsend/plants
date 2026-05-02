@@ -359,6 +359,7 @@
   .thumb-wrap{position:relative;display:inline-block}
   .plant-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;vertical-align:middle;cursor:pointer}
   .thumb-preview{display:none;position:absolute;left:50%;top:100%;transform:translateX(-50%);width:200px;height:200px;object-fit:cover;border-radius:10px;border:2px solid var(--line2);box-shadow:var(--shadow);z-index:50;margin-top:6px;background:var(--panel)}
+  .thumb-preview.flip-up{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
   .thumb-wrap:hover .thumb-preview{display:block}
   body.view-only [data-col="edit"],
   body.view-only #addPlantBtn,
@@ -2577,8 +2578,12 @@ $('#showThumbs').addEventListener('change', ()=>{
 $('#plantTable').addEventListener('mouseenter', (e)=>{
   const wrap = e.target.closest('.thumb-wrap');
   if (!wrap) return;
-  const img = wrap.querySelector('.thumb-preview[data-src]');
-  if (img){ img.src = img.dataset.src; delete img.dataset.src; }
+  const img = wrap.querySelector('.thumb-preview');
+  if (!img) return;
+  if (img.dataset.src){ img.src = img.dataset.src; delete img.dataset.src; }
+  const rect = wrap.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  img.classList.toggle('flip-up', spaceBelow < 220);
 }, true);
 
 // Columns popover
