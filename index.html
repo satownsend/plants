@@ -2061,7 +2061,18 @@ async function fetchForecast(force=false){
     return;
   }
   const stale = !state.forecast || (Date.now() - state.forecastFetched) > 1000*60*60;
-  if (!force && !stale){ renderForecast(); return; }
+  const rainStale = !state.rainfall || (Date.now() - (state.rainfallFetched || 0)) > 1000*60*60*6;
+  if (!force && !stale){
+    // Forecast is fresh, but rainfall might still need fetching (first load,
+    // or >6 hours since last fetch). Kick it off in the background.
+    if (rainStale){
+      fetchRainfallHistory(s).then(r => {
+        state.rainfall = r; state.rainfallFetched = Date.now();
+        save(); renderForecast();
+      }).catch(e => console.warn('[weather] Rainfall fetch failed:', e.message));
+    }
+    renderForecast(); return;
+  }
   // Try NWS first, fall back to Open-Meteo on any failure (non-US point,
   // network error, NWS downtime, etc).
   let daily = null, source = 'nws';
@@ -2086,8 +2097,7 @@ async function fetchForecast(force=false){
   state.nwsAlerts = await fetchNWSAlerts(s.lat, s.lon);
   // Historical rainfall — refresh every 6 hours. Separate from the forecast
   // so a failure here doesn't block anything.
-  const rainStale = !state.rainfall || (Date.now() - (state.rainfallFetched || 0)) > 1000*60*60*6;
-  if (rainStale){
+  if (rainStale || !state.rainfall){
     try {
       state.rainfall = await fetchRainfallHistory(s);
       state.rainfallFetched = Date.now();
