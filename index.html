@@ -2449,7 +2449,9 @@ const COL_LABELS = {qty:'Qty', photos:'Photos', category:'Type', type:'Latin nam
 const COL_VIS_KEY = 'yardDashboard.colVisibility';
 function loadColVis(){
   try {
-    const arr = JSON.parse(localStorage.getItem(COL_VIS_KEY)||'[]');
+    const raw = localStorage.getItem(COL_VIS_KEY);
+    if (!raw) return new Set(['location','photos','watered','fed','notes']);
+    const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
   } catch { return new Set(); }
 }
