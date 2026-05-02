@@ -695,6 +695,10 @@
     <h2>Forecast</h2>
     <div class="forecast" id="forecast"></div>
     <div class="small" style="margin-top:8px" id="weatherNote">—</div>
+    <div id="rainfallSummary" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line2)">
+      <div class="small" style="color:var(--muted);margin-bottom:6px"><strong style="color:var(--ink-soft)">Rainfall</strong> <span id="rainfallNote"></span></div>
+      <div id="rainfallChart"></div>
+    </div>
     <div id="upcomingAlerts" class="upcoming-alerts"></div>
   </div>
 
@@ -2030,6 +2034,25 @@ async function fetchForecastOpenMeteo(s){
   return j.daily;
 }
 
+// Historical rainfall from Open-Meteo archive. Returns last 30 days of daily
+// precipitation so we can show actual vs. forecast and make smarter watering
+// recommendations. Always uses Open-Meteo (NWS doesn't expose historical precip).
+async function fetchRainfallHistory(s){
+  const end = new Date(); end.setDate(end.getDate() - 1);
+  const start = new Date(end); start.setDate(start.getDate() - 29);
+  const fmt = d => d.toISOString().slice(0, 10);
+  const precipUnit = s.units === 'C' ? 'mm' : 'inch';
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${s.lat}&longitude=${s.lon}` +
+    `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
+    `&daily=precipitation_sum&precipitation_unit=${precipUnit}&timezone=auto`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Open-Meteo archive ${r.status}`);
+  const j = await r.json();
+  const d = j.daily;
+  if (!d || !d.time) return [];
+  return d.time.map((t, i) => ({ date: t, amount: d.precipitation_sum[i] || 0 }));
+}
+
 async function fetchForecast(force=false){
   const s = state.settings;
   if (!s.lat || !s.lon){
@@ -2061,6 +2084,15 @@ async function fetchForecast(force=false){
   // Active NWS alerts (frost advisories, etc.) — only meaningful when NWS is
   // reachable. Don't block the forecast render on this; fire and forget.
   state.nwsAlerts = await fetchNWSAlerts(s.lat, s.lon);
+  // Historical rainfall — refresh every 6 hours. Separate from the forecast
+  // so a failure here doesn't block anything.
+  const rainStale = !state.rainfall || (Date.now() - (state.rainfallFetched || 0)) > 1000*60*60*6;
+  if (rainStale){
+    try {
+      state.rainfall = await fetchRainfallHistory(s);
+      state.rainfallFetched = Date.now();
+    } catch(e){ console.warn('[weather] Rainfall history fetch failed:', e.message); }
+  }
   save();
   renderForecast();
 }
@@ -2181,8 +2213,47 @@ function renderForecast(){
       ua.innerHTML = '';
     }
   }
+  // Rainfall summary + chart
+  renderRainfall(pu);
+
   state.computed = { days, frostThresh, warmThresh };
   buildBrief();
+}
+
+function renderRainfall(pu){
+  const panel = $('#rainfallSummary');
+  if (!panel) return;
+  const rain = state.rainfall;
+  if (!rain || !rain.length){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const today = new Date().toISOString().slice(0, 10);
+  const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const sum = n => rain.filter(r => r.date >= daysAgo(n) && r.date <= today).reduce((a, r) => a + (r.amount || 0), 0);
+  const r7 = sum(7), r14 = sum(14), r30 = sum(30);
+  $('#rainfallNote').textContent = `last 7d: ${r7.toFixed(2)} ${pu} · 14d: ${r14.toFixed(2)} ${pu} · 30d: ${r30.toFixed(2)} ${pu}`;
+
+  // Compact bar chart — one bar per day, last 30 days
+  const sorted = rain.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const max = Math.max(0.1, ...sorted.map(r => r.amount || 0));
+  const w = 360, h = 60, padB = 14, padT = 4;
+  const bw = w / sorted.length;
+  const bars = sorted.map((r, i) => {
+    const amt = r.amount || 0;
+    if (amt < 0.005) return '';
+    const bh = (h - padT - padB) * (amt / max);
+    const x = i * bw + bw * 0.1;
+    const y = h - padB - bh;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw * 0.8).toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--cool)" opacity="0.7" rx="1"><title>${r.date}: ${amt.toFixed(2)} ${pu}</title></rect>`;
+  }).join('');
+  // Week markers
+  const marks = sorted.map((r, i) => {
+    const d = new Date(r.date + 'T12:00:00');
+    if (d.getDay() !== 0) return ''; // Sunday marks
+    const x = i * bw + bw / 2;
+    return `<text x="${x.toFixed(1)}" y="${h}" text-anchor="middle" font-size="8" fill="var(--muted)">${d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}</text>`;
+  }).join('');
+  const axis = `<line x1="0" y1="${h - padB}" x2="${w}" y2="${h - padB}" stroke="var(--line2)" stroke-width="0.5"/>`;
+  $('#rainfallChart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block" aria-label="Daily rainfall, last 30 days">${axis}${bars}${marks}</svg>`;
 }
 
 /* ---------- brief / tasks ---------- */
@@ -2225,8 +2296,24 @@ function buildBrief(){
     }
   }
 
-  // Watering — containers and recently un-watered
-  const dryStretch = days.slice(0,3).every(d=>(d.pop||0) < 40 && (d.pcp||0) < 0.1);
+  // Watering — containers and recently un-watered.
+  // Use actual rainfall (state.rainfall) if available; fall back to forecast only.
+  const pu = state.settings.units==='C' ? 'mm' : 'in';
+  const recentRainfall = (() => {
+    const rain = state.rainfall;
+    if (!rain || !rain.length) return null;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return rain.filter(r => r.date >= cutoffStr).reduce((a, r) => a + (r.amount || 0), 0);
+  })();
+  const forecastDry = days.slice(0,3).every(d=>(d.pop||0) < 40 && (d.pcp||0) < 0.1);
+  // Dry stretch: no significant rain in the past 3 days AND none forecast.
+  // Threshold: 0.1 in (or ~2.5 mm). If we have rainfall data, use it; otherwise
+  // fall back to forecast probability only.
+  const dryThreshold = state.settings.units === 'C' ? 2.5 : 0.1;
+  const dryStretch = recentRainfall !== null
+    ? (recentRainfall < dryThreshold && forecastDry)
+    : forecastDry;
   const waterTargets = [];
   for (const p of livePlants){
     const last = lastLogFor(p.id, 'watered');
@@ -2262,7 +2349,10 @@ function buildBrief(){
   // Rain coming → skip watering note
   const wet = days.slice(0,2).find(d=>(d.pop||0)>=60 || (d.pcp||0)>=0.25);
   if (wet){
-    tasks.push({tag:'inspect', title:`Rain likely ${prettyDate(wet.date)} (${wet.pop||0}% / ${wet.pcp||0})`, why:'Skip watering today; check stake ties and mulch washouts after.'});
+    const rainWhy = recentRainfall !== null && recentRainfall >= dryThreshold
+      ? `Already got ${recentRainfall.toFixed(2)} ${pu} in the last 3 days. Skip watering; check stake ties and mulch washouts after.`
+      : 'Skip watering today; check stake ties and mulch washouts after.';
+    tasks.push({tag:'inspect', title:`Rain likely ${prettyDate(wet.date)} (${wet.pop||0}% / ${wet.pcp||0})`, why: rainWhy});
   }
 
   // Seasonal tasks driven by frost dates
