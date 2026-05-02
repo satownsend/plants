@@ -542,8 +542,9 @@
     /* Hide cells with no value to reduce noise */
     #plantTable td.is-empty,
     #plantTable td.is-empty-mobile{display:none}
-    /* Mobile: only show name + edit button — collapse the rest into the tap-to-open card */
-    #plantTable td[data-col]:not([data-col="name"]):not([data-col="edit"]){display:none}
+    /* Mobile: only show name, type, edit — collapse the rest into the tap-to-open card */
+    #plantTable td[data-col]:not([data-col="name"]):not([data-col="category"]):not([data-col="edit"]){display:none}
+    #plantTable td[data-col="category"]{font-size:12px;color:var(--muted);margin-top:-4px}
     /* Edit button: top-right of card */
     #plantTable td:last-child{
       position:absolute;top:10px;right:10px;padding:0;
