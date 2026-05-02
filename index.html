@@ -356,6 +356,18 @@
   #plantTable.hide-notes [data-col="notes"]{display:none}
   #plantTable td[data-col="price"],
   #plantTable td[data-col="total"]{font-variant-numeric:tabular-nums;white-space:nowrap}
+  body.view-only [data-col="edit"],
+  body.view-only #addPlantBtn,
+  body.view-only .edit-row,
+  body.view-only #lightboxDelete,
+  body.view-only #lightboxCaption,
+  body.view-only #lightboxDate,
+  body.view-only #logEditDelete,
+  body.view-only [data-act="delete"],
+  body.view-only #photoUploadInput + span,
+  body.view-only label:has(#photoUploadInput),
+  body.view-only #ympEditBtn,
+  body.view-only #wishlistAddBtn{display:none!important}
   #infoHistory{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px}
   #infoHistory table{width:100%;border-collapse:collapse;font-size:12px}
   #infoHistory th{position:sticky;top:0;background:var(--panel);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
@@ -4246,7 +4258,9 @@ function gsHandleRedirect(){
 }
 
 function refreshGsStatus(){
-  if (isGsAuthed()){
+  const authed = isGsAuthed();
+  document.body.classList.toggle('view-only', !authed);
+  if (authed){
     setSyncStatus('signed in', 'ok');
     $('#gsSaveTokenBtn').textContent = 'Signed in ✓';
     $('#gsSaveTokenBtn').disabled = true;
