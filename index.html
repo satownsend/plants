@@ -2569,7 +2569,8 @@ function renderPlants(){
 $('#showDead').addEventListener('change', renderPlants);
 $('#plantFilter').addEventListener('input', renderPlants);
 const THUMB_KEY = 'yardDashboard.showThumbs';
-$('#showThumbs').checked = localStorage.getItem(THUMB_KEY) === '1';
+const thumbPref = localStorage.getItem(THUMB_KEY);
+$('#showThumbs').checked = thumbPref === null ? window.innerWidth > 700 : thumbPref === '1';
 $('#plantTable').classList.toggle('show-thumbs', $('#showThumbs').checked);
 $('#showThumbs').addEventListener('change', ()=>{
   localStorage.setItem(THUMB_KEY, $('#showThumbs').checked ? '1' : '0');
