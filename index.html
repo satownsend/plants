@@ -2535,7 +2535,7 @@ function renderPlants(){
     const empty = (s) => !s || s === '' ? 'is-empty' : '';
     tr.innerHTML = `
       <td data-col="name"><a href="#" class="namelink" data-info="${p.id}">${escapeHtml(p.name)}</a>${p.dead?' <span class="pill rip">RIP</span>':''}</td>
-      <td data-col="thumb">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<span class="thumb-wrap"><img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""><img class="thumb-preview" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""></span>` : ''; })()}</td>
+      <td data-col="thumb">${(()=>{ const ph = (p.photos||[]).find(x=>!x.hideFromGallery); return ph ? `<span class="thumb-wrap"><img class="plant-thumb" loading="lazy" src="${r2PublicUrl(ph.key)}" alt=""><img class="thumb-preview" data-src="${r2PublicUrl(ph.key)}" alt=""></span>` : ''; })()}</td>
       <td data-col="type" data-label="Latin name" class="${empty(cellType)}">${cellType||'<span class="meta">—</span>'}</td>
       <td data-col="category" data-label="Type" class="${empty(cellCategory)}">${cellCategory||'<span class="meta">—</span>'}</td>
       <td data-col="location" data-label="Location" class="${empty(cellSpot)}">${cellSpot||'<span class="meta">—</span>'}</td>
@@ -2571,6 +2571,12 @@ $('#showThumbs').addEventListener('change', ()=>{
   localStorage.setItem(THUMB_KEY, $('#showThumbs').checked ? '1' : '0');
   $('#plantTable').classList.toggle('show-thumbs', $('#showThumbs').checked);
 });
+$('#plantTable').addEventListener('mouseenter', (e)=>{
+  const wrap = e.target.closest('.thumb-wrap');
+  if (!wrap) return;
+  const img = wrap.querySelector('.thumb-preview[data-src]');
+  if (img){ img.src = img.dataset.src; delete img.dataset.src; }
+}, true);
 
 // Columns popover
 function buildColsPop(){
