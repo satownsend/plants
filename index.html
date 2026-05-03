@@ -660,18 +660,16 @@
   <div>
     <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
       <h1>Our Plants</h1>
-      <nav style="display:flex;gap:12px;font-size:13px">
-        <a href="/beer" style="color:var(--muted);text-decoration:none">Beer</a>
-        <a href="/" style="color:var(--muted);text-decoration:none">Home</a>
+      <nav style="display:flex;gap:4px;font-size:13px">
+        <a href="/beer" style="color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--line);border-radius:6px;transition:color .15s,border-color .15s">Beer</a>
+        <a href="/" style="color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--line);border-radius:6px;transition:color .15s,border-color .15s">Home</a>
       </nav>
     </div>
     <div class="sub" id="dateline">—</div>
   </div>
   <div class="row">
     <span class="chip" id="locchip">📍 set location</span>
-    <span class="chip" id="frostchip">❄ frost dates</span>
     <span class="chip" id="syncchip" title="Click to configure">⟳ sync: off</span>
-    <span class="chip" id="gallerychip" title="Toggle photo gallery" style="cursor:pointer">🖼 gallery</span>
     <span style="position:relative">
       <span class="chip" id="themechip" title="Pick theme" style="cursor:pointer">◐ theme</span>
       <div id="themePop" class="theme-pop" role="dialog" aria-label="Pick theme" style="display:none"></div>
@@ -1636,7 +1634,7 @@ function toggleGalleryFilterPop(force){
   pop.classList.toggle('is-open', open);
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
-$('#gallerychip').onclick = () => setGalleryOn(!isGalleryOn());
+if ($('#gallerychip')) $('#gallerychip').onclick = () => setGalleryOn(!isGalleryOn());
 $('#galleryPrev').onclick = (e) => { e.stopPropagation(); advanceGallery(-1); };
 $('#galleryNext').onclick = (e) => { e.stopPropagation(); advanceGallery(1); };
 $('#galleryFilterBtn').onclick = (e) => { e.stopPropagation(); toggleGalleryFilterPop(); };
@@ -1703,7 +1701,7 @@ function updateChips(){
     }
     frostText += parts.join(' · ');
   } else frostText += 'not set';
-  $('#frostchip').textContent = frostText;
+  if ($('#frostchip')) $('#frostchip').textContent = frostText;
 }
 updateChips();
 
@@ -1736,8 +1734,7 @@ $('#syncchip').onclick = ()=>{
 $('#syncchip').style.cursor = 'pointer';
 $('#locchip').onclick = openSettings;
 $('#locchip').style.cursor = 'pointer';
-$('#frostchip').onclick = openSettings;
-$('#frostchip').style.cursor = 'pointer';
+if ($('#frostchip')){ $('#frostchip').onclick = openSettings; $('#frostchip').style.cursor = 'pointer'; }
 $('#saveSettings').onclick = ()=>{
   state.settings.city = $('#cityInput').value.trim();
   state.settings.lastFrost = $('#lastFrostInput').value;
